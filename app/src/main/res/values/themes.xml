@@ -1,0 +1,27 @@
+<resources>
+    <!-- 
+        StreamBeam Theme
+        Dark theme with green accent
+    -->
+    <style name="Theme.StreamBeam" parent="Theme.AppCompat.NoActionBar">
+        <!-- Primary brand colors -->
+        <item name="colorPrimary">@color/primary_green</item>
+        <item name="colorPrimaryDark">@color/primary_green_dark</item>
+        <item name="colorAccent">@color/accent_blue</item>
+        
+        <!-- Window backgrounds -->
+        <item name="android:statusBarColor">@color/background_dark</item>
+        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:colorBackground">@color/background_dark</item>
+        <item name="android:navigationBarColor">@color/background_dark</item>
+        
+        <!-- Text colors -->
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        
+        <!-- Android 12+ Splash Screen -->
+        <item name="android:windowSplashScreenBackground">@color/background_dark</item>
+        <!-- Splash screen icon - defined in values-v31 for Android 12+ -->
+        
+    </style>
+</resources>

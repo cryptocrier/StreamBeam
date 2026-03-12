@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 
+        StreamBeam Logo for Android 12+ Splash Screen
+        Android 12+ crops to a circle in the center of 288dp container
+        Using 144dp to ensure logo fits within the 192dp safe area
+    -->
+    <item
+        android:width="144dp"
+        android:height="144dp"
+        android:gravity="center">
+        <bitmap 
+            android:src="@drawable/sb_logo"
+            android:gravity="center" />
+    </item>
+</layer-list>

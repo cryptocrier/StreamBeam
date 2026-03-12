@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">StreamBeam</string>
+    <string name="title_home">Home</string>
+    <string name="title_player">Player</string>
+    <string name="title_settings">Settings</string>
+    <string name="cast_button">Cast</string>
+    <string name="settings">Settings</string>
+    <string name="real_debrid_token">Real-Debrid API Token</string>
+    <string name="save">Save</string>
+    <string name="no_movies">No movies found</string>
+    <string name="loading">Loading...</string>
+    <string name="available_streams">Available Streams</string>
+</resources>

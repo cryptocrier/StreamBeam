@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 
+        StreamBeam Dark Theme Colors
+        Red/Grey/Dark Grey - Netflix-inspired theme
+    -->
+    
+    <!-- Primary Brand Colors -->
+    <color name="primary_green">#22C170</color>
+    <color name="primary_green_dark">#1A9A58</color>
+    
+    <!-- Background Colors -->
+    <color name="background_dark">#FF141414</color>
+    <color name="surface_dark">#FF1F1F1F</color>
+    <color name="surface_variant_dark">#FF2A2A2A</color>
+    
+    <!-- Text Colors -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB3B3B3</color>
+    <color name="text_muted">#FF808080</color>
+    
+    <!-- Accent Colors -->
+    <color name="accent_blue">#FF54B9C5</color>
+    <color name="accent_green">#FF46D369</color>
+    <color name="accent_orange">#FFFFA500</color>
+    <color name="accent_yellow">#FFFFD700</color>
+    
+    <!-- Status Colors -->
+    <color name="error_red">#FFE50914</color>
+    <color name="success_green">#FF46D369</color>
+    
+    <!-- Quality Colors -->
+    <color name="quality_4k">#FFFFD700</color>
+    <color name="quality_1080p">#FF54B9C5</color>
+    <color name="quality_720p">#FF46D369</color>
+    <color name="quality_sd">#FFB3B3B3</color>
+    
+    <!-- Legacy/Android compatibility colors -->
+    <color name="purple_200">#FF22C170</color>
+    <color name="purple_500">#FF22C170</color>
+    <color name="purple_700">#FF1A9A58</color>
+    <color name="teal_200">#FF54B9C5</color>
+    <color name="teal_700">#FF008B8B</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Legacy background colors -->
+    <color name="dark_background">#FF141414</color>
+    <color name="card_background">#FF1F1F1F</color>
+    <color name="card_border">#FF2A2A2A</color>
+    
+</resources>
