@@ -72,7 +72,7 @@ data class TmdbTvResult(
 // TMDB API Key - Get your own free API key from https://www.themoviedb.org/settings/api
 // Sign up for a free account, go to Settings -> API, and create a new API key
 // Replace the value below with your actual API key
-private const val TMDB_API_KEY = "YOUR_TMDB_API_KEY_HERE"
+private const val TMDB_API_KEY = "fec717042e2aa2a1ca2b0515bc71e514"
 
 // Note: The app will still work without a valid TMDB key, but episode names may be generic
 // like "Episode 1" instead of actual episode titles
