@@ -77,6 +77,8 @@ private const val TMDB_API_KEY = "fec717042e2aa2a1ca2b0515bc71e514"
 // Note: The app will still work without a valid TMDB key, but episode names may be generic
 // like "Episode 1" instead of actual episode titles
 
+// Test URL: https://api.themoviedb.org/3/find/tt0944947?external_source=imdb_id&api_key=fec717042e2aa2a1ca2b0515bc71e514
+
 class TmdbClient {
     
     private val client: TmdbApi

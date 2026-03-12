@@ -344,18 +344,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val response = addon.getMeta("series", tvShowId)
                 val fullMeta = response.meta
                 
-                // Check if episodes have generic names (like "Episode 1") and need enrichment
-                val needsEnrichment = fullMeta.videos?.any { video ->
-                    val title = video.title ?: ""
-                    title.isBlank() || title.matches(Regex("^[Ee]pisode\\s*\\d+\\.?$"))
-                } ?: false
+                // Log what we got from Cinemeta
+                fullMeta.videos?.firstOrNull()?.let {
+                    android.util.Log.d(Constants.LogTags.VIEW_MODEL, "First episode from Cinemeta: title='${it.title}', season=${it.season}, episode=${it.episode}")
+                }
                 
-                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Episodes need enrichment: $needsEnrichment")
-                
-                // Enrich with TMDB data if needed
-                val enrichedMeta = if (needsEnrichment && tvShowId.startsWith("tt")) {
+                // Always try to enrich with TMDB for better data (thumbnails, better descriptions)
+                val enrichedMeta = if (tvShowId.startsWith("tt")) {
+                    android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Attempting TMDB enrichment for: $tvShowId")
                     enrichEpisodesWithTmdb(fullMeta, tvShowId)
                 } else {
+                    android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Skipping TMDB - not an IMDB ID: $tvShowId")
                     fullMeta
                 }
                 
@@ -402,24 +401,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             
+            // Log what we're matching
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Matching ${meta.videos?.size} videos against ${tmdbEpisodeMap.size} TMDB episodes")
+            
             // Enrich existing videos with TMDB data
+            var enrichedCount = 0
             val enrichedVideos = meta.videos?.map { video ->
                 val season = video.season ?: 0
                 val episode = video.episode ?: 0
                 val tmdbEp = tmdbEpisodeMap[Pair(season, episode)]
                 
                 if (tmdbEp != null) {
+                    enrichedCount++
+                    val newTitle = tmdbEp.name?.takeIf { it.isNotBlank() } ?: video.title
+                    android.util.Log.v(Constants.LogTags.VIEW_MODEL, "Enriched S${season}E${episode}: '${video.title}' -> '$newTitle'")
                     video.copy(
-                        title = tmdbEp.name?.takeIf { it.isNotBlank() } ?: video.title,
+                        title = newTitle,
                         overview = tmdbEp.overview?.takeIf { it.isNotBlank() } ?: video.overview,
                         thumbnail = tmdbEp.getFullStillPath() ?: video.thumbnail,
                         released = tmdbEp.airDate ?: video.released
                     )
                 } else {
+                    android.util.Log.v(Constants.LogTags.VIEW_MODEL, "No TMDB match for S${season}E${episode}")
                     video
                 }
             }
             
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Successfully enriched $enrichedCount episodes")
             meta.copy(videos = enrichedVideos)
             
         } catch (e: Exception) {
