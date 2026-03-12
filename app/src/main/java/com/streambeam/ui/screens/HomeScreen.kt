@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -560,24 +561,6 @@ fun EmptyState(message: String) {
     }
 }
 
-// Shimmer brush for loading states
-private fun Brush.Companion.shimmer(colors: List<Color>): Brush {
-    return linearGradient(
-        colors = colors,
-        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
-    )
-}
-// ... existing content ...
-
-// Shimmer brush for loading states
-private fun Brush.Companion.shimmer(colors: List<Color>): Brush {
-    return linearGradient(
-        colors = colors,
-        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
-    )
-}
 
 @Composable
 fun RecentlyWatchedSection(
@@ -660,8 +643,8 @@ fun WatchHistoryCard(
                 
                 // Progress indicator
                 if (!item.isCompleted && item.getProgressPercent() > 0) {
-                    androidx.compose.material3.LinearProgressIndicator(
-                        progress = { item.getProgressPercent() / 100f },
+                    LinearProgressIndicator(
+                        progress = item.getProgressPercent() / 100f,
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter),

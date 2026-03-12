@@ -257,7 +257,7 @@ private fun WatchHistoryItem(
                     }
                     
                     LinearProgressIndicator(
-                        progress = { item.getProgressPercent() / 100f },
+                        progress = item.getProgressPercent() / 100f,
                         modifier = Modifier.fillMaxWidth(),
                         color = if (item.isCompleted) 
                             MaterialTheme.colorScheme.primary 

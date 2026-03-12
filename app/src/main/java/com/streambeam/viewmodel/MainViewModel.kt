@@ -152,6 +152,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         when (type) {
             ContentType.MOVIES -> if (_movies.value.isEmpty()) loadMovies()
             ContentType.TV_SHOWS -> if (_tvShows.value.isEmpty()) loadTVShows()
+            ContentType.RECENTLY_WATCHED -> { /* No loading needed, watch history is already loaded */ }
         }
     }
     
