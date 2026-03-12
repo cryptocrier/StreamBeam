@@ -10,6 +10,7 @@
 
 # Keep model classes
 -keep class com.streambeam.model.** { *; }
+-keep class com.streambeam.addons.** { *; }
 
 # Keep Cast
 -keep class com.google.android.gms.cast.** { *; }

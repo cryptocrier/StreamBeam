@@ -4,10 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.streambeam.addons.AddonManager
+import com.streambeam.addons.TmdbClient
 import com.streambeam.cast.CastManager
 import com.streambeam.data.DataStoreManager
 import com.streambeam.model.Meta
 import com.streambeam.model.Stream
+import com.streambeam.model.Video
 import com.streambeam.realdebrid.RealDebridException
 import com.streambeam.realdebrid.RealDebridManager
 import com.streambeam.ui.state.StreamLoadingState
@@ -21,6 +23,7 @@ import kotlinx.coroutines.withTimeout
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     private val addonManager = AddonManager()
+    private val tmdbClient = TmdbClient()
     val castManager = CastManager(application)
     private val dataStoreManager = DataStoreManager(application)
     
@@ -340,11 +343,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Fetch full metadata which includes all episodes
                 val response = addon.getMeta("series", tvShowId)
                 val fullMeta = response.meta
-                _selectedTVShow.value = fullMeta
+                
+                // Check if episodes have generic names (like "Episode 1") and need enrichment
+                val needsEnrichment = fullMeta.videos?.any { video ->
+                    val title = video.title ?: ""
+                    title.isBlank() || title.matches(Regex("^[Ee]pisode\\s*\\d+\\.?$"))
+                } ?: false
+                
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Episodes need enrichment: $needsEnrichment")
+                
+                // Enrich with TMDB data if needed
+                val enrichedMeta = if (needsEnrichment && tvShowId.startsWith("tt")) {
+                    enrichEpisodesWithTmdb(fullMeta, tvShowId)
+                } else {
+                    fullMeta
+                }
+                
+                _selectedTVShow.value = enrichedMeta
                 
                 // Count episodes by season
-                val episodesBySeason = fullMeta.videos?.groupBy { it.season ?: 0 }
-                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Loaded TV show with ${fullMeta.videos?.size} episodes across ${episodesBySeason?.size} seasons")
+                val episodesBySeason = enrichedMeta.videos?.groupBy { it.season ?: 0 }
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Loaded TV show with ${enrichedMeta.videos?.size} episodes across ${episodesBySeason?.size} seasons")
                 episodesBySeason?.forEach { (season, episodes) ->
                     android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Season $season: ${episodes.size} episodes")
                 }
@@ -354,6 +373,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             _isLoading.value = false
+        }
+    }
+    
+    /**
+     * Enrich episode data with TMDB to get proper episode titles and descriptions
+     */
+    private suspend fun enrichEpisodesWithTmdb(meta: Meta, imdbId: String): Meta {
+        return try {
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Enriching episodes with TMDB for: $imdbId")
+            
+            // Get episode data from TMDB
+            val tmdbEpisodes = tmdbClient.getAllEpisodes(imdbId)
+            
+            if (tmdbEpisodes.isEmpty()) {
+                android.util.Log.w(Constants.LogTags.VIEW_MODEL, "No TMDB data found for: $imdbId")
+                return meta
+            }
+            
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Got TMDB data for ${tmdbEpisodes.size} seasons")
+            
+            // Create a map of season:episode to TMDB episode data
+            val tmdbEpisodeMap = mutableMapOf<Pair<Int, Int>, com.streambeam.addons.TmdbEpisode>()
+            tmdbEpisodes.forEach { (seasonNum, episodes) ->
+                episodes.forEach { episode ->
+                    val epNum = episode.episodeNumber ?: return@forEach
+                    tmdbEpisodeMap[Pair(seasonNum, epNum)] = episode
+                }
+            }
+            
+            // Enrich existing videos with TMDB data
+            val enrichedVideos = meta.videos?.map { video ->
+                val season = video.season ?: 0
+                val episode = video.episode ?: 0
+                val tmdbEp = tmdbEpisodeMap[Pair(season, episode)]
+                
+                if (tmdbEp != null) {
+                    video.copy(
+                        title = tmdbEp.name?.takeIf { it.isNotBlank() } ?: video.title,
+                        overview = tmdbEp.overview?.takeIf { it.isNotBlank() } ?: video.overview,
+                        thumbnail = tmdbEp.getFullStillPath() ?: video.thumbnail,
+                        released = tmdbEp.airDate ?: video.released
+                    )
+                } else {
+                    video
+                }
+            }
+            
+            meta.copy(videos = enrichedVideos)
+            
+        } catch (e: Exception) {
+            android.util.Log.e(Constants.LogTags.VIEW_MODEL, "Failed to enrich with TMDB: ${e.message}", e)
+            meta // Return original meta on failure
         }
     }
     
