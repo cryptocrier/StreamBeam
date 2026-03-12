@@ -380,17 +380,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun enrichEpisodesWithTmdb(meta: Meta, imdbId: String): Meta {
         return try {
-            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Enriching episodes with TMDB for: $imdbId")
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "=== ENRICHING: $imdbId ===")
             
             // Get episode data from TMDB
             val tmdbEpisodes = tmdbClient.getAllEpisodes(imdbId)
+            
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "TMDB returned ${tmdbEpisodes.size} seasons")
+            tmdbEpisodes.forEach { (season, eps) ->
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "  Season $season: ${eps.size} episodes")
+            }
             
             if (tmdbEpisodes.isEmpty()) {
                 android.util.Log.w(Constants.LogTags.VIEW_MODEL, "No TMDB data found for: $imdbId")
                 return meta
             }
-            
-            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Got TMDB data for ${tmdbEpisodes.size} seasons")
             
             // Create a map of season:episode to TMDB episode data
             val tmdbEpisodeMap = mutableMapOf<Pair<Int, Int>, com.streambeam.addons.TmdbEpisode>()
@@ -401,20 +404,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             
-            // Log what we're matching
-            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Matching ${meta.videos?.size} videos against ${tmdbEpisodeMap.size} TMDB episodes")
+            val totalVideos = meta.videos?.size ?: 0
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Matching $totalVideos videos against ${tmdbEpisodeMap.size} TMDB episodes")
             
             // Enrich existing videos with TMDB data
             var enrichedCount = 0
             val enrichedVideos = meta.videos?.map { video ->
                 val season = video.season ?: 0
-                val episode = video.episode ?: 0
-                val tmdbEp = tmdbEpisodeMap[Pair(season, episode)]
+                val episodeNum = video.episode ?: 0
+                val key = Pair(season, episodeNum)
+                val tmdbEp = tmdbEpisodeMap[key]
                 
                 if (tmdbEp != null) {
                     enrichedCount++
                     val newTitle = tmdbEp.name?.takeIf { it.isNotBlank() } ?: video.title
-                    android.util.Log.v(Constants.LogTags.VIEW_MODEL, "Enriched S${season}E${episode}: '${video.title}' -> '$newTitle'")
+                    android.util.Log.d(Constants.LogTags.VIEW_MODEL, "✓ S${season}E${episodeNum}: '${video.title?.take(20)}' -> '${newTitle.take(20)}'")
                     video.copy(
                         title = newTitle,
                         overview = tmdbEp.overview?.takeIf { it.isNotBlank() } ?: video.overview,
@@ -422,12 +426,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         released = tmdbEp.airDate ?: video.released
                     )
                 } else {
-                    android.util.Log.v(Constants.LogTags.VIEW_MODEL, "No TMDB match for S${season}E${episode}")
+                    android.util.Log.d(Constants.LogTags.VIEW_MODEL, "✗ S${season}E${episodeNum}: no TMDB match (have: ${tmdbEpisodeMap.keys.joinToString { "${it.first}:${it.second}" }})")
                     video
                 }
             }
             
-            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Successfully enriched $enrichedCount episodes")
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "=== ENRICHED: $enrichedCount / $totalVideos episodes ===")
             meta.copy(videos = enrichedVideos)
             
         } catch (e: Exception) {
