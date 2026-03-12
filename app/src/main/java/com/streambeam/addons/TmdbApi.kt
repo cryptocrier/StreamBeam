@@ -83,11 +83,18 @@ class TmdbClient {
     
     init {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = HttpLoggingInterceptor.Level.BODY
         }
         
         val httpClient = OkHttpClient.Builder()
             .addInterceptor(logging)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                android.util.Log.d("TmdbClient", "Request: ${request.url}")
+                val response = chain.proceed(request)
+                android.util.Log.d("TmdbClient", "Response: ${response.code}")
+                response
+            }
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .build()
@@ -105,10 +112,12 @@ class TmdbClient {
      */
     suspend fun getEpisodesForSeason(tmdbSeriesId: Int, seasonNumber: Int): List<TmdbEpisode> {
         return try {
+            android.util.Log.d("TmdbClient", "Getting season $seasonNumber for series $tmdbSeriesId")
             val response = client.getSeasonDetails(tmdbSeriesId, seasonNumber)
+            android.util.Log.d("TmdbClient", "Got ${response.episodes?.size ?: 0} episodes for season $seasonNumber")
             response.episodes ?: emptyList()
         } catch (e: Exception) {
-            android.util.Log.e("TmdbClient", "Failed to get season details: ${e.message}")
+            android.util.Log.e("TmdbClient", "Failed to get season $seasonNumber details: ${e.message}")
             emptyList()
         }
     }
@@ -118,10 +127,14 @@ class TmdbClient {
      */
     suspend fun findSeriesByImdbId(imdbId: String): Int? {
         return try {
+            android.util.Log.d("TmdbClient", "Finding TMDB ID for IMDB: $imdbId")
             val response = client.findByExternalId(imdbId)
-            response.tvResults?.firstOrNull()?.id
+            android.util.Log.d("TmdbClient", "Find response tv_results: ${response.tvResults?.size ?: 0}")
+            response.tvResults?.firstOrNull()?.id?.also {
+                android.util.Log.d("TmdbClient", "Found TMDB ID: $it")
+            }
         } catch (e: Exception) {
-            android.util.Log.e("TmdbClient", "Failed to find series: ${e.message}")
+            android.util.Log.e("TmdbClient", "Failed to find series: ${e.message}", e)
             null
         }
     }
