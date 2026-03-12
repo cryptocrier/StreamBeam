@@ -10,6 +10,7 @@ import com.streambeam.data.DataStoreManager
 import com.streambeam.model.Meta
 import com.streambeam.model.Stream
 import com.streambeam.model.Video
+import com.streambeam.model.WatchProgress
 import com.streambeam.realdebrid.RealDebridException
 import com.streambeam.realdebrid.RealDebridManager
 import com.streambeam.ui.state.StreamLoadingState
@@ -30,7 +31,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var realDebridManager: RealDebridManager? = null
     
     // Content type enum
-    enum class ContentType { MOVIES, TV_SHOWS }
+    enum class ContentType { RECENTLY_WATCHED, MOVIES, TV_SHOWS }
     
     private val _currentContentType = MutableStateFlow(ContentType.MOVIES)
     val currentContentType: StateFlow<ContentType> = _currentContentType
@@ -80,12 +81,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _preferredLanguages = MutableStateFlow<Set<String>>(setOf("en"))
     val preferredLanguages: StateFlow<Set<String>> = _preferredLanguages
     
+    // Watch History
+    private val _watchHistory = MutableStateFlow<List<WatchProgress>>(emptyList())
+    val watchHistory: StateFlow<List<WatchProgress>> = _watchHistory
+    
     init {
         loadMovies()
         loadTVShows()
         loadSavedApiKey()
         loadSavedCometUrl()
         loadPreferredLanguages()
+        loadWatchHistory()
     }
     
     private fun loadPreferredLanguages() {
@@ -158,6 +164,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+    
+    // Watch History Methods
+    private fun loadWatchHistory() {
+        viewModelScope.launch {
+            dataStoreManager.watchHistory.collect { history ->
+                _watchHistory.value = history
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Loaded ${history.size} watch history items")
+            }
+        }
+    }
+    
+    fun saveWatchProgress(
+        metaId: String,
+        type: String,
+        name: String,
+        poster: String?,
+        position: Long,
+        duration: Long,
+        season: Int? = null,
+        episode: Int? = null,
+        episodeTitle: String? = null
+    ) {
+        viewModelScope.launch {
+            val id = WatchProgress.createId(metaId, season, episode)
+            val progress = WatchProgress(
+                id = id,
+                metaId = metaId,
+                type = type,
+                name = name,
+                poster = poster,
+                season = season,
+                episode = episode,
+                episodeTitle = episodeTitle,
+                position = position,
+                duration = duration,
+                lastWatched = System.currentTimeMillis(),
+                isCompleted = position > 0 && duration > 0 && position >= duration * 0.9 // 90% watched = completed
+            )
+            dataStoreManager.saveWatchProgress(progress)
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Saved watch progress: $name at ${progress.getProgressPercent()}%")
+        }
+    }
+    
+    fun removeFromWatchHistory(id: String) {
+        viewModelScope.launch {
+            dataStoreManager.removeFromWatchHistory(id)
+        }
+    }
+    
+    fun clearWatchHistory() {
+        viewModelScope.launch {
+            dataStoreManager.clearWatchHistory()
+        }
+    }
+    
+    fun getResumePosition(id: String): Long {
+        return _watchHistory.value.find { it.id == id }?.position ?: 0L
+    }
+    
+    fun hasResumePosition(id: String): Boolean {
+        val progress = _watchHistory.value.find { it.id == id }
+        return progress != null && progress.position > 10000 && // At least 10 seconds
+               !progress.isCompleted && // Not completed
+               progress.duration > 0 && 
+               progress.position < progress.duration * 0.9 // Less than 90% watched
     }
     
     fun setRealDebridKey(key: String) {

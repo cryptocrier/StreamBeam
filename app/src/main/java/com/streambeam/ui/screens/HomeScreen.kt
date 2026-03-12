@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.streambeam.model.Meta
+import com.streambeam.model.WatchProgress
 import com.streambeam.ui.theme.TextSecondary
 import com.streambeam.viewmodel.MainViewModel
 import androidx.compose.ui.platform.LocalContext
@@ -74,7 +75,8 @@ import androidx.compose.ui.platform.LocalContext
 fun HomeScreen(
     viewModel: MainViewModel,
     onNavigateToStreams: (String, String, String, String?) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToRecentlyWatched: () -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -165,17 +167,18 @@ fun HomeScreen(
                 
                 // Category Chips
                 CategoryRow(
-                    categories = listOf("Movies", "TV Shows"),
+                    categories = listOf("Continue Watching", "Movies", "TV Shows"),
                     selectedCategory = when (currentContentType) {
+                        MainViewModel.ContentType.RECENTLY_WATCHED -> "Continue Watching"
                         MainViewModel.ContentType.MOVIES -> "Movies"
                         MainViewModel.ContentType.TV_SHOWS -> "TV Shows"
-                        else -> "Movies"
                     },
                     onCategorySelected = { category ->
                         isSearchActive = false
                         searchQuery = ""
                         viewModel.clearSearch()
                         when (category) {
+                            "Continue Watching" -> viewModel.setContentType(MainViewModel.ContentType.RECENTLY_WATCHED)
                             "Movies" -> viewModel.setContentType(MainViewModel.ContentType.MOVIES)
                             "TV Shows" -> viewModel.setContentType(MainViewModel.ContentType.TV_SHOWS)
                         }
@@ -190,6 +193,12 @@ fun HomeScreen(
                         .weight(1f)
                 ) {
                     when {
+                        currentContentType == MainViewModel.ContentType.RECENTLY_WATCHED -> {
+                            RecentlyWatchedSection(
+                                viewModel = viewModel,
+                                onItemClick = onNavigateToRecentlyWatched
+                            )
+                        }
                         isLoading || isSearching -> LoadingGrid()
                         error != null && !isSearchActive -> ErrorState(
                             message = error ?: "Something went wrong",
@@ -197,6 +206,7 @@ fun HomeScreen(
                                 when (currentContentType) {
                                     MainViewModel.ContentType.MOVIES -> viewModel.loadMovies()
                                     MainViewModel.ContentType.TV_SHOWS -> viewModel.loadTVShows()
+                                    else -> {}
                                 }
                             }
                         )
@@ -557,4 +567,173 @@ private fun Brush.Companion.shimmer(colors: List<Color>): Brush {
         start = androidx.compose.ui.geometry.Offset(0f, 0f),
         end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
     )
+}
+// ... existing content ...
+
+// Shimmer brush for loading states
+private fun Brush.Companion.shimmer(colors: List<Color>): Brush {
+    return linearGradient(
+        colors = colors,
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
+    )
+}
+
+@Composable
+fun RecentlyWatchedSection(
+    viewModel: MainViewModel,
+    onItemClick: () -> Unit
+) {
+    val watchHistory by viewModel.watchHistory.collectAsState()
+    
+    if (watchHistory.isEmpty()) {
+        EmptyState("No watch history yet\nMovies and shows you watch will appear here")
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 140.dp),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(
+                items = watchHistory,
+                key = { it.id }
+            ) { item ->
+                WatchHistoryCard(
+                    item = item,
+                    onClick = onItemClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WatchHistoryCard(
+    item: WatchProgress,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f)
+            ) {
+                // Poster
+                SubcomposeAsyncImage(
+                    model = item.poster,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    loading = {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                        }
+                    },
+                    error = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = TextSecondary
+                            )
+                        }
+                    }
+                )
+                
+                // Progress indicator
+                if (!item.isCompleted && item.getProgressPercent() > 0) {
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { item.getProgressPercent() / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+                
+                // Completed badge
+                if (item.isCompleted) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = "✓",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                
+                // Resume badge
+                if (!item.isCompleted && item.getProgressPercent() > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = "${item.getProgressPercent()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Title
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            // Episode info for TV shows
+            item.getEpisodeDisplay()?.let { episodeInfo ->
+                Text(
+                    text = episodeInfo,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            // Progress text
+            Text(
+                text = if (item.isCompleted) "Completed" else item.getFormattedProgress(),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                color = TextSecondary
+            )
+        }
+    }
 }

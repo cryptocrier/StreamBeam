@@ -20,6 +20,7 @@ import androidx.navigation.navArgument
 import com.google.android.gms.cast.framework.CastContext
 import com.streambeam.ui.screens.HomeScreen
 import com.streambeam.ui.screens.PlayerScreen
+import com.streambeam.ui.screens.RecentlyWatchedScreen
 import com.streambeam.ui.screens.SettingsScreen
 import com.streambeam.ui.screens.StreamSelectionScreen
 import com.streambeam.ui.screens.TVShowDetailScreen
@@ -115,6 +116,34 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateToSettings = {
                                     navController.navigate("settings")
+                                },
+                                onNavigateToRecentlyWatched = {
+                                    navController.navigate("recent")
+                                }
+                            )
+                        }
+                        composable("recent") {
+                            RecentlyWatchedScreen(
+                                viewModel = viewModel,
+                                onItemClick = { watchItem ->
+                                    // Navigate to player or stream selection based on content type
+                                    if (watchItem.type == "series") {
+                                        // For TV shows, go to stream selection
+                                        val episodeId = if (watchItem.season != null && watchItem.episode != null) {
+                                            "${watchItem.metaId}:${watchItem.season}:${watchItem.episode}"
+                                        } else watchItem.metaId
+                                        val encodedTitle = URLEncoder.encode(watchItem.getDisplayTitle(), StandardCharsets.UTF_8.toString())
+                                        val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
+                                        navController.navigate("streams/$episodeId/series/$encodedTitle?poster=$encodedPoster")
+                                    } else {
+                                        // For movies, go to stream selection
+                                        val encodedTitle = URLEncoder.encode(watchItem.name, StandardCharsets.UTF_8.toString())
+                                        val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
+                                        navController.navigate("streams/${watchItem.metaId}/movie/$encodedTitle?poster=$encodedPoster")
+                                    }
+                                },
+                                onClearAll = {
+                                    viewModel.clearWatchHistory()
                                 }
                             )
                         }
@@ -200,7 +229,12 @@ class MainActivity : ComponentActivity() {
                                     currentPlayerUrl.value = url
                                     currentPlayerTitle.value = title
                                     currentPlayerPoster.value = poster.ifEmpty { null }
-                                    navController.navigate("player/$encodedUrl?title=$encodedTitle&poster=$encodedPoster")
+                                    // Build player URL with metadata for progress tracking
+                                    val resumePos = viewModel.getResumePosition(
+                                        if (type == "series" && metaId.contains(":")) metaId else metaId
+                                    )
+                                    val resumeParam = if (resumePos > 0) "&resume=$resumePos" else ""
+                                    navController.navigate("player/$encodedUrl?title=$encodedTitle&poster=$encodedPoster&metaId=$metaId&type=$type$resumeParam")
                                 },
                                 onBack = { navController.popBackStack() }
                             )
@@ -225,7 +259,7 @@ class MainActivity : ComponentActivity() {
                         }
                         
                         composable(
-                            "player/{url}?title={title}&poster={poster}",
+                            "player/{url}?title={title}&poster={poster}&metaId={metaId}&type={type}&resume={resume}",
                             arguments = listOf(
                                 navArgument("url") { type = NavType.StringType },
                                 navArgument("title") { 
@@ -235,21 +269,52 @@ class MainActivity : ComponentActivity() {
                                 navArgument("poster") { 
                                     type = NavType.StringType
                                     defaultValue = ""
+                                },
+                                navArgument("metaId") { 
+                                    type = NavType.StringType
+                                    defaultValue = ""
+                                },
+                                navArgument("type") { 
+                                    type = NavType.StringType
+                                    defaultValue = "movie"
+                                },
+                                navArgument("resume") { 
+                                    type = NavType.StringType
+                                    defaultValue = "0"
                                 }
                             )
                         ) { backStackEntry ->
                             val encodedUrl = backStackEntry.arguments?.getString("url") ?: ""
                             val encodedTitle = backStackEntry.arguments?.getString("title") ?: ""
                             val encodedPoster = backStackEntry.arguments?.getString("poster") ?: ""
+                            val metaId = backStackEntry.arguments?.getString("metaId") ?: ""
+                            val type = backStackEntry.arguments?.getString("type") ?: "movie"
+                            val resumeStr = backStackEntry.arguments?.getString("resume") ?: "0"
+                            val resumePosition = resumeStr.toLongOrNull() ?: 0L
+                            
                             val url = URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8.toString())
                             val title = URLDecoder.decode(encodedTitle, StandardCharsets.UTF_8.toString())
                             val poster = URLDecoder.decode(encodedPoster, StandardCharsets.UTF_8.toString())
+                            
+                            // Parse season/episode from metaId if it's a series (format: seriesId:season:episode)
+                            val season: Int? = if (type == "series" && metaId.contains(":")) {
+                                metaId.split(":").getOrNull(1)?.toIntOrNull()
+                            } else null
+                            val episode: Int? = if (type == "series" && metaId.contains(":")) {
+                                metaId.split(":").getOrNull(2)?.toIntOrNull()
+                            } else null
+                            val cleanMetaId = if (metaId.contains(":")) metaId.split(":")[0] else metaId
                             
                             PlayerScreen(
                                 viewModel = viewModel,
                                 streamUrl = url,
                                 title = title,
                                 posterUrl = poster.ifEmpty { null },
+                                metaId = cleanMetaId.ifEmpty { null },
+                                type = type,
+                                season = season,
+                                episode = episode,
+                                resumePosition = resumePosition,
                                 onBack = { navController.popBackStack() }
                             )
                         }

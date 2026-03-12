@@ -84,6 +84,12 @@ fun PlayerScreen(
     streamUrl: String,
     title: String,
     posterUrl: String? = null,
+    metaId: String? = null,
+    type: String = "movie",
+    season: Int? = null,
+    episode: Int? = null,
+    episodeTitle: String? = null,
+    resumePosition: Long = 0L,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -213,8 +219,29 @@ fun PlayerScreen(
             viewModel.castManager.playLocally(streamUrl, title)
         }
         
+        // Resume from saved position if available
+        if (resumePosition > 0 && !isCasting) {
+            player.seekTo(resumePosition)
+        }
+        
         onDispose {
             player.removeListener(listener)
+            
+            // Save watch progress before leaving
+            if (metaId != null && duration > 0) {
+                viewModel.saveWatchProgress(
+                    metaId = metaId,
+                    type = type,
+                    name = title,
+                    poster = posterUrl,
+                    position = currentPosition,
+                    duration = duration,
+                    season = season,
+                    episode = episode,
+                    episodeTitle = episodeTitle
+                )
+            }
+            
             // Only stop local playback when leaving
             // Casting continues in the background - user can control via persistent cast bar
             if (!isCasting) {
