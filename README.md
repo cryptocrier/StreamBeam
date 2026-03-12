@@ -18,7 +18,7 @@ A premium native Android streaming app with built-in Stremio addon support, Real
 
 ```
 app/
-├── src/main/java/com/stremioclone/
+├── src/main/java/com/streambeam/
 │   ├── MainActivity.kt              # Main entry point
 │   ├── StremioCloneApp.kt           # Application class
 │   ├── model/                        # Data models

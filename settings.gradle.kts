@@ -16,5 +16,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StremioClone"
+rootProject.name = "StreamBeam"
 include(":app")

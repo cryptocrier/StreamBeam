@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
-        android:name=".StremioCloneApp"
+        android:name=".StreamBeamApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -35,7 +35,7 @@
         <!-- Cast Options Provider -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.stremioclone.cast.CastOptionsProvider" />
+            android:value="com.streambeam.cast.CastOptionsProvider" />
 
         <!-- Google Play Services Version -->
         <meta-data
