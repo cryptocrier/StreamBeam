@@ -38,6 +38,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -561,6 +562,14 @@ fun EmptyState(message: String) {
     }
 }
 
+// Shimmer brush for loading states
+private fun Brush.Companion.shimmer(colors: List<Color>): Brush {
+    return linearGradient(
+        colors = colors,
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
+    )
+}
 
 @Composable
 fun RecentlyWatchedSection(
