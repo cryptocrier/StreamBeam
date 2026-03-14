@@ -99,6 +99,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _torrentProcessingState = MutableStateFlow(TorrentProcessingState())
     val torrentProcessingState: StateFlow<TorrentProcessingState> = _torrentProcessingState
     
+    // Subtitle state
+    private val _availableSubtitles = MutableStateFlow<List<com.streambeam.model.Subtitle>>(emptyList())
+    val availableSubtitles: StateFlow<List<com.streambeam.model.Subtitle>> = _availableSubtitles
+    
+    private val _isLoadingSubtitles = MutableStateFlow(false)
+    val isLoadingSubtitles: StateFlow<Boolean> = _isLoadingSubtitles
+    
+    private val _selectedSubtitle = MutableStateFlow<com.streambeam.model.Subtitle?>(null)
+    val selectedSubtitle: StateFlow<com.streambeam.model.Subtitle?> = _selectedSubtitle
+    
+    private val subtitleRepository = com.streambeam.api.SubtitleRepository.getInstance()
+    
     init {
         loadMovies()
         loadTVShows()
@@ -1084,5 +1096,73 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "Languages: ${langDistribution}")
         
         return processedStreams
+    }
+    
+    // ==================== SUBTITLE FUNCTIONS ====================
+    
+    /**
+     * Search for subtitles based on video metadata
+     */
+    fun searchSubtitles(
+        title: String,
+        imdbId: String? = null,
+        season: Int? = null,
+        episode: Int? = null,
+        year: Int? = null
+    ) {
+        viewModelScope.launch {
+            _isLoadingSubtitles.value = true
+            _availableSubtitles.value = emptyList()
+            
+            try {
+                val request = com.streambeam.model.SubtitleSearchRequest(
+                    query = title,
+                    imdbId = imdbId,
+                    languages = _preferredLanguages.value.toList(),
+                    season = season,
+                    episode = episode,
+                    year = year
+                )
+                
+                val subtitles = subtitleRepository.searchSubtitles(request)
+                _availableSubtitles.value = subtitles
+                
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Found ${subtitles.size} subtitles for $title")
+            } catch (e: Exception) {
+                android.util.Log.e(Constants.LogTags.VIEW_MODEL, "Error searching subtitles: ${e.message}")
+            } finally {
+                _isLoadingSubtitles.value = false
+            }
+        }
+    }
+    
+    /**
+     * Select a subtitle for playback
+     */
+    fun selectSubtitle(subtitle: com.streambeam.model.Subtitle?) {
+        _selectedSubtitle.value = subtitle
+        android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Selected subtitle: ${subtitle?.languageName}")
+    }
+    
+    /**
+     * Download subtitle file and return local path
+     */
+    suspend fun downloadSubtitle(subtitle: com.streambeam.model.Subtitle): String? {
+        return try {
+            // Parse file_id from subtitle id (format: "file_id" from OpenSubtitles)
+            val fileId = subtitle.id.toIntOrNull() ?: return null
+            subtitleRepository.getDownloadUrl(fileId)
+        } catch (e: Exception) {
+            android.util.Log.e(Constants.LogTags.VIEW_MODEL, "Error downloading subtitle: ${e.message}")
+            null
+        }
+    }
+    
+    /**
+     * Clear subtitle search results
+     */
+    fun clearSubtitles() {
+        _availableSubtitles.value = emptyList()
+        _selectedSubtitle.value = null
     }
 }
