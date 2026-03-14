@@ -28,6 +28,32 @@ interface TmdbApi {
         @Query("external_source") externalSource: String = "imdb_id",
         @Query("api_key") apiKey: String = TMDB_API_KEY
     ): TmdbFindResponse
+    
+    @GET("movie/popular")
+    suspend fun getPopularMovies(
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("page") page: Int = 1,
+        @Query("language") language: String = "en-US"
+    ): TmdbMovieListResponse
+    
+    @GET("tv/popular")
+    suspend fun getPopularTVShows(
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("page") page: Int = 1,
+        @Query("language") language: String = "en-US"
+    ): TmdbTVListResponse
+    
+    @GET("trending/movie/week")
+    suspend fun getTrendingMovies(
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("page") page: Int = 1
+    ): TmdbMovieListResponse
+    
+    @GET("trending/tv/week")
+    suspend fun getTrendingTVShows(
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("page") page: Int = 1
+    ): TmdbTVListResponse
 }
 
 // TMDB Data Models
@@ -67,6 +93,44 @@ data class TmdbTvResult(
     @SerializedName("name") val name: String?,
     @SerializedName("poster_path") val posterPath: String?,
     @SerializedName("first_air_date") val firstAirDate: String?
+)
+
+// Popular/Trending Movies Response
+data class TmdbMovieListResponse(
+    @SerializedName("page") val page: Int?,
+    @SerializedName("results") val results: List<TmdbMovieResult>,
+    @SerializedName("total_pages") val totalPages: Int?,
+    @SerializedName("total_results") val totalResults: Int?
+)
+
+data class TmdbMovieResult(
+    @SerializedName("id") val id: Int,
+    @SerializedName("title") val title: String?,
+    @SerializedName("overview") val overview: String?,
+    @SerializedName("poster_path") val posterPath: String?,
+    @SerializedName("backdrop_path") val backdropPath: String?,
+    @SerializedName("release_date") val releaseDate: String?,
+    @SerializedName("vote_average") val voteAverage: Float?,
+    @SerializedName("genre_ids") val genreIds: List<Int>?
+)
+
+// Popular/Trending TV Shows Response
+data class TmdbTVListResponse(
+    @SerializedName("page") val page: Int?,
+    @SerializedName("results") val results: List<TmdbTVResultDetailed>,
+    @SerializedName("total_pages") val totalPages: Int?,
+    @SerializedName("total_results") val totalResults: Int?
+)
+
+data class TmdbTVResultDetailed(
+    @SerializedName("id") val id: Int,
+    @SerializedName("name") val name: String?,
+    @SerializedName("overview") val overview: String?,
+    @SerializedName("poster_path") val posterPath: String?,
+    @SerializedName("backdrop_path") val backdropPath: String?,
+    @SerializedName("first_air_date") val firstAirDate: String?,
+    @SerializedName("vote_average") val voteAverage: Float?,
+    @SerializedName("genre_ids") val genreIds: List<Int>?
 )
 
 // TMDB API Key - Get your own free API key from https://www.themoviedb.org/settings/api
@@ -166,5 +230,57 @@ class TmdbClient {
         }
         
         return result
+    }
+    
+    /**
+     * Get popular movies from TMDB
+     */
+    suspend fun getPopularMovies(page: Int = 1): TmdbMovieListResponse {
+        return try {
+            android.util.Log.d("TmdbClient", "Getting popular movies, page $page")
+            client.getPopularMovies(page = page)
+        } catch (e: Exception) {
+            android.util.Log.e("TmdbClient", "Failed to get popular movies: ${e.message}")
+            TmdbMovieListResponse(1, emptyList(), 0, 0)
+        }
+    }
+    
+    /**
+     * Get popular TV shows from TMDB
+     */
+    suspend fun getPopularTVShows(page: Int = 1): TmdbTVListResponse {
+        return try {
+            android.util.Log.d("TmdbClient", "Getting popular TV shows, page $page")
+            client.getPopularTVShows(page = page)
+        } catch (e: Exception) {
+            android.util.Log.e("TmdbClient", "Failed to get popular TV shows: ${e.message}")
+            TmdbTVListResponse(1, emptyList(), 0, 0)
+        }
+    }
+    
+    /**
+     * Get trending movies this week
+     */
+    suspend fun getTrendingMovies(page: Int = 1): TmdbMovieListResponse {
+        return try {
+            android.util.Log.d("TmdbClient", "Getting trending movies, page $page")
+            client.getTrendingMovies(page = page)
+        } catch (e: Exception) {
+            android.util.Log.e("TmdbClient", "Failed to get trending movies: ${e.message}")
+            TmdbMovieListResponse(1, emptyList(), 0, 0)
+        }
+    }
+    
+    /**
+     * Get trending TV shows this week
+     */
+    suspend fun getTrendingTVShows(page: Int = 1): TmdbTVListResponse {
+        return try {
+            android.util.Log.d("TmdbClient", "Getting trending TV shows, page $page")
+            client.getTrendingTVShows(page = page)
+        } catch (e: Exception) {
+            android.util.Log.e("TmdbClient", "Failed to get trending TV shows: ${e.message}")
+            TmdbTVListResponse(1, emptyList(), 0, 0)
+        }
     }
 }

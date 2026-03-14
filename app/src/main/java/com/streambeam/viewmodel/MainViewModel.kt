@@ -51,6 +51,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching
     
+    // Search filters
+    data class SearchFilters(
+        val genre: String? = null,
+        val year: Int? = null,
+        val minRating: Float? = null,
+        val sortBy: SortOption = SortOption.POPULARITY
+    )
+    
+    enum class SortOption {
+        POPULARITY,
+        RATING,
+        YEAR_DESC,
+        YEAR_ASC
+    }
+    
+    private val _searchFilters = MutableStateFlow(SearchFilters())
+    val searchFilters: StateFlow<SearchFilters> = _searchFilters
+    
+    // Trending content
+    private val _trendingMovies = MutableStateFlow<List<Meta>>(emptyList())
+    val trendingMovies: StateFlow<List<Meta>> = _trendingMovies
+    
+    private val _trendingTVShows = MutableStateFlow<List<Meta>>(emptyList())
+    val trendingTVShows: StateFlow<List<Meta>> = _trendingTVShows
+    
+    private val _isLoadingTrending = MutableStateFlow(false)
+    val isLoadingTrending: StateFlow<Boolean> = _isLoadingTrending
+    
+    // Search history
+    private val _searchHistory = MutableStateFlow<List<String>>(emptyList())
+    val searchHistory: StateFlow<List<String>> = _searchHistory
+    
     private val _streams = MutableStateFlow<List<Stream>>(emptyList())
     val streams: StateFlow<List<Stream>> = _streams
     
@@ -114,6 +146,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         loadMovies()
         loadTVShows()
+        loadTrendingContent()
         loadSavedApiKey()
         loadSavedCometUrl()
         loadPreferredLanguages()
@@ -1164,5 +1197,161 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSubtitles() {
         _availableSubtitles.value = emptyList()
         _selectedSubtitle.value = null
+    }
+    
+    // ==================== ENHANCED SEARCH & TRENDING ====================
+    
+    /**
+     * Load trending/popular content from TMDb
+     */
+    fun loadTrendingContent() {
+        viewModelScope.launch {
+            _isLoadingTrending.value = true
+            
+            try {
+                // Load trending movies
+                val movieResults = tmdbClient.getPopularMovies(page = 1)
+                _trendingMovies.value = movieResults.results.map { movie ->
+                    Meta(
+                        id = "tmdb:${movie.id}",
+                        type = "movie",
+                        name = movie.title,
+                        poster = movie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" },
+                        background = movie.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" },
+                        description = movie.overview,
+                        releaseInfo = movie.releaseDate?.take(4),
+                        imdbRating = movie.voteAverage?.toString(),
+                        genres = movie.genreIds?.map { getGenreName(it) }
+                    )
+                }
+                
+                // Load trending TV shows
+                val tvResults = tmdbClient.getPopularTVShows(page = 1)
+                _trendingTVShows.value = tvResults.results.map { tv ->
+                    Meta(
+                        id = "tmdb:${tv.id}",
+                        type = "series",
+                        name = tv.name,
+                        poster = tv.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" },
+                        background = tv.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" },
+                        description = tv.overview,
+                        releaseInfo = tv.firstAirDate?.take(4),
+                        imdbRating = tv.voteAverage?.toString(),
+                        genres = tv.genreIds?.map { getGenreName(it) }
+                    )
+                }
+                
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Loaded trending: ${_trendingMovies.value.size} movies, ${_trendingTVShows.value.size} TV shows")
+            } catch (e: Exception) {
+                android.util.Log.e(Constants.LogTags.VIEW_MODEL, "Error loading trending content: ${e.message}")
+            } finally {
+                _isLoadingTrending.value = false
+            }
+        }
+    }
+    
+    private fun getGenreName(genreId: Int): String {
+        return when (genreId) {
+            28 -> "Action"
+            12 -> "Adventure"
+            16 -> "Animation"
+            35 -> "Comedy"
+            80 -> "Crime"
+            99 -> "Documentary"
+            18 -> "Drama"
+            10751 -> "Family"
+            14 -> "Fantasy"
+            36 -> "History"
+            27 -> "Horror"
+            10402 -> "Music"
+            9648 -> "Mystery"
+            10749 -> "Romance"
+            878 -> "Sci-Fi"
+            10770 -> "TV Movie"
+            53 -> "Thriller"
+            10752 -> "War"
+            37 -> "Western"
+            10759 -> "Action & Adventure"
+            10762 -> "Kids"
+            10763 -> "News"
+            10764 -> "Reality"
+            10765 -> "Sci-Fi & Fantasy"
+            10766 -> "Soap"
+            10767 -> "Talk"
+            10768 -> "War & Politics"
+            else -> "Unknown"
+        }
+    }
+    
+    /**
+     * Update search filters
+     */
+    fun setSearchFilters(filters: SearchFilters) {
+        _searchFilters.value = filters
+        // Re-apply filters to current search results
+        applySearchFilters()
+    }
+    
+    /**
+     * Apply filters to current search results
+     */
+    private fun applySearchFilters() {
+        val filters = _searchFilters.value
+        val currentResults = _searchResults.value
+        
+        if (currentResults.isEmpty()) return
+        
+        val filtered = currentResults.filter { meta ->
+            // Filter by genre
+            val genreMatch = filters.genre?.let { genre ->
+                meta.genres?.any { it.equals(genre, ignoreCase = true) } ?: false
+            } ?: true
+            
+            // Filter by year
+            val yearMatch = filters.year?.let { year ->
+                meta.releaseInfo?.toIntOrNull() == year
+            } ?: true
+            
+            // Filter by rating
+            val ratingMatch = filters.minRating?.let { minRating ->
+                meta.imdbRating?.toFloatOrNull()?.let { it >= minRating } ?: false
+            } ?: true
+            
+            genreMatch && yearMatch && ratingMatch
+        }
+        
+        // Sort results
+        val sorted = when (filters.sortBy) {
+            SortOption.RATING -> filtered.sortedByDescending { it.imdbRating?.toFloatOrNull() ?: 0f }
+            SortOption.YEAR_DESC -> filtered.sortedByDescending { it.releaseInfo?.toIntOrNull() ?: 0 }
+            SortOption.YEAR_ASC -> filtered.sortedBy { it.releaseInfo?.toIntOrNull() ?: Int.MAX_VALUE }
+            SortOption.POPULARITY -> filtered // Keep original order (already sorted by popularity)
+        }
+        
+        _searchResults.value = sorted
+    }
+    
+    /**
+     * Add search query to history
+     */
+    fun addToSearchHistory(query: String) {
+        if (query.isBlank()) return
+        
+        val current = _searchHistory.value.toMutableList()
+        // Remove if exists (to move to top)
+        current.remove(query)
+        // Add to top
+        current.add(0, query)
+        // Keep only last 10
+        while (current.size > 10) current.removeLast()
+        
+        _searchHistory.value = current
+    }
+    
+    /**
+     * Clear search history
+     */
+    fun clearSearchHistory() {
+        _searchHistory.value = emptyList()
     }
 }
