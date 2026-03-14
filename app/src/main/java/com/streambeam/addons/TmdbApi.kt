@@ -19,39 +19,39 @@ interface TmdbApi {
     suspend fun getSeasonDetails(
         @Path("series_id") seriesId: Int,
         @Path("season_number") seasonNumber: Int,
-        @Query("api_key") apiKey: String = TMDB_API_KEY
+        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514
     ): TmdbSeasonResponse
     
     @GET("find/{external_id}")
     suspend fun findByExternalId(
         @Path("external_id") externalId: String,
         @Query("external_source") externalSource: String = "imdb_id",
-        @Query("api_key") apiKey: String = TMDB_API_KEY
+        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514
     ): TmdbFindResponse
     
     @GET("movie/popular")
     suspend fun getPopularMovies(
-        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
         @Query("page") page: Int = 1,
         @Query("language") language: String = "en-US"
     ): TmdbMovieListResponse
     
     @GET("tv/popular")
     suspend fun getPopularTVShows(
-        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
         @Query("page") page: Int = 1,
         @Query("language") language: String = "en-US"
     ): TmdbTVListResponse
     
     @GET("trending/movie/week")
     suspend fun getTrendingMovies(
-        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
         @Query("page") page: Int = 1
     ): TmdbMovieListResponse
     
     @GET("trending/tv/week")
     suspend fun getTrendingTVShows(
-        @Query("api_key") apiKey: String = TMDB_API_KEY,
+        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
         @Query("page") page: Int = 1
     ): TmdbTVListResponse
 }
