@@ -13,45 +13,48 @@ import retrofit2.http.Query
  * TMDB API integration for fetching TV episode data
  * Free API key from https://www.themoviedb.org/settings/api
  */
+// TMDB API Key - Get your own free API key from https://www.themoviedb.org/settings/api
+private const val TMDB_API_KEY = "fec717042e2aa2a1ca2b0515bc71e514"
+
 interface TmdbApi {
     
     @GET("tv/{series_id}/season/{season_number}")
     suspend fun getSeasonDetails(
         @Path("series_id") seriesId: Int,
         @Path("season_number") seasonNumber: Int,
-        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514
+        @Query("api_key") apiKey: String = TMDB_API_KEY
     ): TmdbSeasonResponse
     
     @GET("find/{external_id}")
     suspend fun findByExternalId(
         @Path("external_id") externalId: String,
         @Query("external_source") externalSource: String = "imdb_id",
-        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514
+        @Query("api_key") apiKey: String = TMDB_API_KEY
     ): TmdbFindResponse
     
     @GET("movie/popular")
     suspend fun getPopularMovies(
-        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
         @Query("page") page: Int = 1,
         @Query("language") language: String = "en-US"
     ): TmdbMovieListResponse
     
     @GET("tv/popular")
     suspend fun getPopularTVShows(
-        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
         @Query("page") page: Int = 1,
         @Query("language") language: String = "en-US"
     ): TmdbTVListResponse
     
     @GET("trending/movie/week")
     suspend fun getTrendingMovies(
-        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
         @Query("page") page: Int = 1
     ): TmdbMovieListResponse
     
     @GET("trending/tv/week")
     suspend fun getTrendingTVShows(
-        @Query("api_key") apiKey: String = fec717042e2aa2a1ca2b0515bc71e514,
+        @Query("api_key") apiKey: String = TMDB_API_KEY,
         @Query("page") page: Int = 1
     ): TmdbTVListResponse
 }
@@ -132,11 +135,6 @@ data class TmdbTVResultDetailed(
     @SerializedName("vote_average") val voteAverage: Float?,
     @SerializedName("genre_ids") val genreIds: List<Int>?
 )
-
-// TMDB API Key - Get your own free API key from https://www.themoviedb.org/settings/api
-// Sign up for a free account, go to Settings -> API, and create a new API key
-// Replace the value below with your actual API key
-private const val TMDB_API_KEY = "fec717042e2aa2a1ca2b0515bc71e514"
 
 // Note: The app will still work without a valid TMDB key, but episode names may be generic
 // like "Episode 1" instead of actual episode titles
