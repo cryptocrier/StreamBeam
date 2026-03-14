@@ -32,7 +32,11 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Replay5
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Slider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Divider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -64,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -510,59 +515,6 @@ fun PlayerScreen(
                                                 modifier = Modifier.size(28.dp)
                                             )
                                         }
-                                    } else {
-                                        // Spacer in fullscreen to keep layout
-                                        Spacer(modifier = Modifier.size(48.dp))
-                                    }
-                                    
-                                    // Fullscreen toggle - always show when controls visible
-                                    IconButton(
-                                        onClick = { isFullscreen = !isFullscreen },
-                                        modifier = Modifier.size(48.dp)
-                                    ) {
-                                        // Fullscreen icon
-                                        Box(
-                                            modifier = Modifier.size(24.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                                                val strokeWidth = 3f
-                                                val color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
-                                                val width: Float = size.width
-                                                val height: Float = size.height
-                                                val cornerSize: Float = width * 0.3f
-                                                
-                                                if (isFullscreen) {
-                                                    // Exit fullscreen icon (corners pointing inward)
-                                                    // Top-left corner
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, cornerSize), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, 0f), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
-                                                    // Top-right corner
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, cornerSize), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
-                                                    // Bottom-left corner
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, height - cornerSize), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, height), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
-                                                    // Bottom-right corner
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, height), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, height - cornerSize), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
-                                                } else {
-                                                    // Enter fullscreen icon (corners pointing outward)
-                                                    // Top-left
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(cornerSize, 0f), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, cornerSize), strokeWidth)
-                                                    // Top-right
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width, cornerSize), strokeWidth)
-                                                    // Bottom-left
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(cornerSize, height), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(0f, height - cornerSize), strokeWidth)
-                                                    // Bottom-right
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width - cornerSize, height), strokeWidth)
-                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width, height - cornerSize), strokeWidth)
-                                                }
-                                            }
-                                        }
                                     }
                                 }
                                 
@@ -580,20 +532,189 @@ fun PlayerScreen(
                                             .padding(horizontal = 16.dp, vertical = 8.dp)
                                     )
                                 }
+                            }
+                        }
+                        
+                        // Bottom control bar with settings and fullscreen
+                        AnimatedVisibility(
+                            visible = showControls,
+                            enter = fadeIn(),
+                            exit = fadeOut(),
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Settings button (cog) - opens audio/subtitle menu
+                                var showSettingsMenu by remember { mutableStateOf(false) }
                                 
-                                // Subtitle selector - show when controls visible
-                                if (showControls) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    com.streambeam.ui.components.SubtitleSelector(
-                                        subtitles = availableSubtitles,
-                                        selectedSubtitle = selectedSubtitle,
-                                        isLoading = isLoadingSubtitles,
-                                        onSelectSubtitle = { subtitle ->
-                                            viewModel.selectSubtitle(subtitle)
-                                            // TODO: Apply subtitle to player
-                                        },
-                                        modifier = Modifier.padding(horizontal = 16.dp)
-                                    )
+                                Box {
+                                    IconButton(
+                                        onClick = { showSettingsMenu = true },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = "Settings",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                    
+                                    // Settings dropdown menu
+                                    DropdownMenu(
+                                        expanded = showSettingsMenu,
+                                        onDismissRequest = { showSettingsMenu = false },
+                                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        // Audio Tracks Section
+                                        if (availableAudioTracks.isNotEmpty()) {
+                                            DropdownMenuItem(
+                                                text = { Text("Audio Tracks", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                                                onClick = { },
+                                                enabled = false
+                                            )
+                                            availableAudioTracks.forEach { track ->
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            if (currentAudioTrackId == track.id) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Check,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(16.dp),
+                                                                    tint = MaterialTheme.colorScheme.primary
+                                                                )
+                                                                Spacer(modifier = Modifier.width(8.dp))
+                                                            }
+                                                            Text(track.name)
+                                                        }
+                                                    },
+                                                    onClick = {
+                                                        viewModel.castManager.setActiveAudioTrack(track.id)
+                                                        showSettingsMenu = false
+                                                    }
+                                                )
+                                            }
+                                            Divider()
+                                        }
+                                        
+                                        // Subtitles Section
+                                        DropdownMenuItem(
+                                            text = { Text("Subtitles", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                                            onClick = { },
+                                            enabled = false
+                                        )
+                                        
+                                        // Off option
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    if (selectedSubtitle == null) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(16.dp),
+                                                            tint = MaterialTheme.colorScheme.primary
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                    }
+                                                    Text("Off")
+                                                }
+                                            },
+                                            onClick = {
+                                                viewModel.selectSubtitle(null)
+                                                showSettingsMenu = false
+                                            }
+                                        )
+                                        
+                                        // Available subtitles
+                                        availableSubtitles.forEach { subtitle ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        if (selectedSubtitle?.id == subtitle.id) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Check,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(16.dp),
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                        }
+                                                        Text("${subtitle.getFlag()} ${subtitle.languageName}")
+                                                    }
+                                                },
+                                                onClick = {
+                                                    viewModel.selectSubtitle(subtitle)
+                                                    showSettingsMenu = false
+                                                }
+                                            )
+                                        }
+                                        
+                                        if (isLoadingSubtitles) {
+                                            DropdownMenuItem(
+                                                text = { 
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(16.dp),
+                                                            strokeWidth = 2.dp
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text("Loading...")
+                                                    }
+                                                },
+                                                onClick = { },
+                                                enabled = false
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                // Fullscreen toggle
+                                IconButton(
+                                    onClick = { isFullscreen = !isFullscreen },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    // Fullscreen icon
+                                    Box(
+                                        modifier = Modifier.size(24.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                                            val strokeWidth = 3f
+                                            val color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
+                                            val width: Float = size.width
+                                            val height: Float = size.height
+                                            val cornerSize: Float = width * 0.3f
+                                            
+                                            if (isFullscreen) {
+                                                // Exit fullscreen icon (corners pointing inward)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, cornerSize), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, 0f), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, cornerSize), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height - cornerSize), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, height), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, height), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height - cornerSize), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
+                                            } else {
+                                                // Enter fullscreen icon (corners pointing outward)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(cornerSize, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, cornerSize), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width, cornerSize), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(cornerSize, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(0f, height - cornerSize), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width - cornerSize, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width, height - cornerSize), strokeWidth)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
