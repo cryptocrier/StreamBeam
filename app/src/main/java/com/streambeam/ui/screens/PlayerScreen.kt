@@ -462,9 +462,16 @@ fun PlayerScreen(
                             )
                         }
                         
-                        // Top controls overlay - only show in non-fullscreen mode
+                        // Tap area to show/hide controls
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { showControls = !showControls }
+                        )
+                        
+                        // Top controls overlay - show when controls visible
                         AnimatedVisibility(
-                            visible = !isFullscreen && showControls,
+                            visible = showControls,
                             enter = fadeIn(),
                             exit = fadeOut(),
                             modifier = Modifier.align(Alignment.TopStart)
@@ -477,30 +484,34 @@ fun PlayerScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Back button
-                                    IconButton(
-                                        onClick = onBack,
-                                        modifier = Modifier.size(48.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.ArrowBack,
-                                            contentDescription = "Back",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(28.dp)
-                                        )
+                                    // Back button - only show in non-fullscreen
+                                    if (!isFullscreen) {
+                                        IconButton(
+                                            onClick = onBack,
+                                            modifier = Modifier.size(48.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowBack,
+                                                contentDescription = "Back",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    } else {
+                                        // Spacer in fullscreen to keep layout
+                                        Spacer(modifier = Modifier.size(48.dp))
                                     }
                                     
-                                    // Fullscreen toggle
+                                    // Fullscreen toggle - always show when controls visible
                                     IconButton(
                                         onClick = { isFullscreen = !isFullscreen },
                                         modifier = Modifier.size(48.dp)
                                     ) {
-                                        // Draw a simple fullscreen icon using Box with borders
+                                        // Fullscreen icon
                                         Box(
                                             modifier = Modifier.size(24.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            // Outer square with corners
                                             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                                                 val strokeWidth = 3f
                                                 val color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
@@ -508,39 +519,54 @@ fun PlayerScreen(
                                                 val height: Float = size.height
                                                 val cornerSize: Float = width * 0.3f
                                                 
-                                                // Draw four corners to make an open square
-                                                // Top-left
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(cornerSize, 0f), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, cornerSize), strokeWidth)
-                                                
-                                                // Top-right
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width, cornerSize), strokeWidth)
-                                                
-                                                // Bottom-left
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(cornerSize, height), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(0f, height - cornerSize), strokeWidth)
-                                                
-                                                // Bottom-right
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width - cornerSize, height), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width, height - cornerSize), strokeWidth)
+                                                if (isFullscreen) {
+                                                    // Exit fullscreen icon (corners pointing inward)
+                                                    // Top-left corner
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, cornerSize), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, 0f), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
+                                                    // Top-right corner
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, cornerSize), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
+                                                    // Bottom-left corner
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, height - cornerSize), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, height), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
+                                                    // Bottom-right corner
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, height), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, height - cornerSize), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
+                                                } else {
+                                                    // Enter fullscreen icon (corners pointing outward)
+                                                    // Top-left
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(cornerSize, 0f), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, cornerSize), strokeWidth)
+                                                    // Top-right
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width, cornerSize), strokeWidth)
+                                                    // Bottom-left
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(cornerSize, height), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(0f, height - cornerSize), strokeWidth)
+                                                    // Bottom-right
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width - cornerSize, height), strokeWidth)
+                                                    drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width, height - cornerSize), strokeWidth)
+                                                }
                                             }
                                         }
                                     }
                                 }
                                 
-                                // Title shown below controls in non-fullscreen mode
-                                Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .padding(top = 72.dp, start = 16.dp, end = 16.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                                )
+                                // Title - only show in non-fullscreen mode
+                                if (!isFullscreen) {
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
                             }
                         }
                         
