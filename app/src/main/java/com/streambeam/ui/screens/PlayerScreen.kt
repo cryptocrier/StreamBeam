@@ -125,6 +125,24 @@ fun PlayerScreen(
     DisposableEffect(isFullscreen) {
         val window = activity?.window
         
+        // Enable fullscreen layout that extends behind system bars
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window?.setDecorFitsSystemWindows(!isFullscreen)
+        } else {
+            @Suppress("DEPRECATION")
+            window?.decorView?.fitsSystemWindows = !isFullscreen
+        }
+        
+        // Also set layout to use full screen including cutout area
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            window?.attributes?.layoutInDisplayCutoutMode = 
+                if (isFullscreen) {
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                } else {
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+                }
+        }
+        
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             // API 30+ - Use WindowInsetsController
             val controller = window?.insetsController
@@ -145,6 +163,7 @@ fun PlayerScreen(
                     or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
                     or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                     or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 )
             } else {
                 decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
@@ -155,9 +174,11 @@ fun PlayerScreen(
             // Restore system bars when leaving screen
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 window?.insetsController?.show(android.view.WindowInsets.Type.systemBars())
+                window?.setDecorFitsSystemWindows(true)
             } else {
                 @Suppress("DEPRECATION")
                 window?.decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+                window?.decorView?.fitsSystemWindows = true
             }
         }
     }
@@ -408,8 +429,10 @@ fun PlayerScreen(
                                     PlayerView(ctx).apply {
                                         player = viewModel.castManager.exoPlayer
                                         useController = true // Use default controls
+                                        // In fullscreen, use FILL to cover entire screen
+                                        // In normal mode, use FIT to maintain aspect ratio
                                         resizeMode = if (isFullscreen) {
-                                            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
                                         } else {
                                             androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                                         }
@@ -424,7 +447,7 @@ fun PlayerScreen(
                                     }
                                     // Update resize mode when fullscreen changes
                                     playerView.resizeMode = if (isFullscreen) {
-                                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
                                     } else {
                                         androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                                     }
@@ -730,7 +753,6 @@ fun PlayerScreen(
             }
         }
     }
-}
 
 @Composable
 fun AudioTrackSelector(
