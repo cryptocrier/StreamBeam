@@ -544,8 +544,8 @@ fun PlayerScreen(
                                 )
                             }
                         }
-                    
-                    // Error overlay
+                        
+                        // Error overlay
                     if (hasError) {
                         Box(
                             modifier = Modifier
