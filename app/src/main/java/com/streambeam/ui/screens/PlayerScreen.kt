@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Replay5
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Card
@@ -417,7 +416,7 @@ fun PlayerScreen(
                         },
                         onSeekForward = { viewModel.castManager.seekTo(currentPosition + Constants.Seek.FORWARD_MS) },
                         onSeekBackward = { viewModel.castManager.seekTo(currentPosition - Constants.Seek.BACKWARD_MS) },
-                        onSeekTo = { position -> 
+                        onSeekTo = { position: Long -> 
                             seekPosition = position
                             isSeeking = true
                         },
@@ -425,7 +424,7 @@ fun PlayerScreen(
                             viewModel.castManager.seekTo(seekPosition)
                             isSeeking = false
                         },
-                        onSelectAudioTrack = { trackId ->
+                        onSelectAudioTrack = { trackId: Long ->
                             viewModel.castManager.setActiveAudioTrack(trackId)
                         }
                     )
@@ -464,7 +463,7 @@ fun PlayerScreen(
                         }
                         
                         // Top controls overlay - only show in non-fullscreen mode
-                        androidx.compose.animation.AnimatedVisibility(
+                        AnimatedVisibility(
                             visible = !isFullscreen && showControls,
                             enter = fadeIn(),
                             exit = fadeOut(),
@@ -546,29 +545,30 @@ fun PlayerScreen(
                         }
                         
                         // Error overlay
-                    if (hasError) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.8f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
+                        if (hasError) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.8f)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "Playback Error",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = errorMessage,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 32.dp)
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "Playback Error",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = errorMessage,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 32.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -622,20 +622,18 @@ fun AudioTrackSelector(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White
                 )
-                if (true) { // Always show dropdown arrow
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Collapse" else "Expand",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
         
         // Track options - only show when NOT casting
         if (!isCasting) {
-            androidx.compose.animation.AnimatedVisibility(visible = expanded) {
+            AnimatedVisibility(visible = expanded) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
