@@ -210,6 +210,14 @@ fun PlayerScreen(
     }
     
     DisposableEffect(streamUrl) {
+        // Search for subtitles when video loads
+        viewModel.searchSubtitles(
+            title = title,
+            imdbId = metaId,
+            season = season,
+            episode = episode
+        )
+        
         val player = viewModel.castManager.initializePlayer()
         playerInitialized = true
         
@@ -399,6 +407,11 @@ fun PlayerScreen(
                 val availableAudioTracks by viewModel.castManager.availableAudioTracks.collectAsState()
                 val currentAudioTrackId by viewModel.castManager.currentAudioTrackId.collectAsState()
                 
+                // Get subtitles
+                val availableSubtitles by viewModel.availableSubtitles.collectAsState()
+                val selectedSubtitle by viewModel.selectedSubtitle.collectAsState()
+                val isLoadingSubtitles by viewModel.isLoadingSubtitles.collectAsState()
+                
                 if (isCasting) {
                     // Chromecast UI with poster, scrubber, and controls
                     CastingOverlay(
@@ -565,6 +578,21 @@ fun PlayerScreen(
                                             .padding(top = 8.dp, start = 16.dp, end = 16.dp)
                                             .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                                             .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                                
+                                // Subtitle selector - show when controls visible
+                                if (showControls) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    com.streambeam.ui.components.SubtitleSelector(
+                                        subtitles = availableSubtitles,
+                                        selectedSubtitle = selectedSubtitle,
+                                        isLoading = isLoadingSubtitles,
+                                        onSelectSubtitle = { subtitle ->
+                                            viewModel.selectSubtitle(subtitle)
+                                            // TODO: Apply subtitle to player
+                                        },
+                                        modifier = Modifier.padding(horizontal = 16.dp)
                                     )
                                 }
                             }
