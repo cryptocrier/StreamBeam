@@ -1215,13 +1215,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     Meta(
                         id = "tmdb:${movie.id}",
                         type = "movie",
-                        name = movie.title,
+                        name = movie.title ?: "Unknown",
                         poster = movie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" },
                         background = movie.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" },
+                        logo = null,
                         description = movie.overview,
-                        releaseInfo = movie.releaseDate?.take(4),
-                        imdbRating = movie.voteAverage?.toString(),
-                        genres = movie.genreIds?.map { getGenreName(it) }
+                        released = movie.releaseDate,
+                        genre = movie.genreIds?.map { getGenreName(it) },
+                        videos = null
                     )
                 }
                 
@@ -1231,13 +1232,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     Meta(
                         id = "tmdb:${tv.id}",
                         type = "series",
-                        name = tv.name,
+                        name = tv.name ?: "Unknown",
                         poster = tv.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" },
                         background = tv.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" },
+                        logo = null,
                         description = tv.overview,
-                        releaseInfo = tv.firstAirDate?.take(4),
-                        imdbRating = tv.voteAverage?.toString(),
-                        genres = tv.genreIds?.map { getGenreName(it) }
+                        released = tv.firstAirDate,
+                        genre = tv.genreIds?.map { getGenreName(it) },
+                        videos = null
                     )
                 }
                 
@@ -1304,28 +1306,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val filtered = currentResults.filter { meta ->
             // Filter by genre
             val genreMatch = filters.genre?.let { genre ->
-                meta.genres?.any { it.equals(genre, ignoreCase = true) } ?: false
+                meta.genre?.any { it.equals(genre, ignoreCase = true) } ?: false
             } ?: true
             
-            // Filter by year
+            // Filter by year (extract from released date)
             val yearMatch = filters.year?.let { year ->
-                meta.releaseInfo?.toIntOrNull() == year
+                meta.released?.take(4)?.toIntOrNull() == year
             } ?: true
             
-            // Filter by rating
-            val ratingMatch = filters.minRating?.let { minRating ->
-                meta.imdbRating?.toFloatOrNull()?.let { it >= minRating } ?: false
-            } ?: true
-            
-            genreMatch && yearMatch && ratingMatch
+            genreMatch && yearMatch
         }
         
         // Sort results
         val sorted = when (filters.sortBy) {
-            SortOption.RATING -> filtered.sortedByDescending { it.imdbRating?.toFloatOrNull() ?: 0f }
-            SortOption.YEAR_DESC -> filtered.sortedByDescending { it.releaseInfo?.toIntOrNull() ?: 0 }
-            SortOption.YEAR_ASC -> filtered.sortedBy { it.releaseInfo?.toIntOrNull() ?: Int.MAX_VALUE }
-            SortOption.POPULARITY -> filtered // Keep original order (already sorted by popularity)
+            SortOption.YEAR_DESC -> filtered.sortedByDescending { it.released?.take(4)?.toIntOrNull() ?: 0 }
+            SortOption.YEAR_ASC -> filtered.sortedBy { it.released?.take(4)?.toIntOrNull() ?: Int.MAX_VALUE }
+            SortOption.POPULARITY, SortOption.RATING -> filtered // Keep original order
         }
         
         _searchResults.value = sorted
