@@ -1,6 +1,7 @@
 package com.streambeam.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import kotlinx.coroutines.delay
@@ -19,13 +20,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -45,40 +53,47 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
-import coil.compose.SubcomposeAsyncImage
 import com.streambeam.model.Meta
 import com.streambeam.model.WatchProgress
 import com.streambeam.ui.theme.TextSecondary
 import com.streambeam.viewmodel.MainViewModel
 import androidx.compose.ui.platform.LocalContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
     onNavigateToStreams: (String, String, String, String?) -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToRecentlyWatched: () -> Unit
+    onNavigateToRecentlyWatched: (WatchProgress) -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -151,91 +166,137 @@ fun HomeScreen(
             )
         }
     ) { paddingValues ->
+        val lazyListState = rememberLazyListState()
+        
+        // Track if carousel is visible based on scroll
+        val firstVisibleItemIndex by remember {
+            derivedStateOf { lazyListState.firstVisibleItemIndex }
+        }
+        val firstVisibleItemScrollOffset by remember {
+            derivedStateOf { lazyListState.firstVisibleItemScrollOffset }
+        }
+        
+        // Determine carousel visibility
+        val isCarouselVisible = firstVisibleItemIndex == 0
+        
+        // Snap to hide carousel when scrolling past threshold (only after user interaction)
+        var hasUserScrolled by remember { mutableStateOf(false) }
+        
+        LaunchedEffect(firstVisibleItemIndex, firstVisibleItemScrollOffset) {
+            // Only snap after user has actively scrolled (not on initial load)
+            if (hasUserScrolled && firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset > 300) {
+                lazyListState.animateScrollToItem(1)
+            }
+            // Mark as user scrolled once we detect any scroll
+            if (firstVisibleItemScrollOffset > 50) {
+                hasUserScrolled = true
+            }
+        }
+        
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            Column {
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize()
+            ) {
                 // Search Bar
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                item {
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
                 
-                // Category Chips
-                CategoryRow(
-                    categories = listOf("Continue Watching", "Movies", "TV Shows"),
-                    selectedCategory = when (currentContentType) {
-                        MainViewModel.ContentType.RECENTLY_WATCHED -> "Continue Watching"
-                        MainViewModel.ContentType.MOVIES -> "Movies"
-                        MainViewModel.ContentType.TV_SHOWS -> "TV Shows"
-                    },
-                    onCategorySelected = { category ->
-                        isSearchActive = false
-                        searchQuery = ""
-                        viewModel.clearSearch()
-                        when (category) {
-                            "Continue Watching" -> viewModel.setContentType(MainViewModel.ContentType.RECENTLY_WATCHED)
-                            "Movies" -> viewModel.setContentType(MainViewModel.ContentType.MOVIES)
-                            "TV Shows" -> viewModel.setContentType(MainViewModel.ContentType.TV_SHOWS)
-                        }
-                    },
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+                // Continue Watching Carousel (with peek when scrolled)
+                item {
+                    ContinueWatchingCarousel(
+                        viewModel = viewModel,
+                        onItemClick = onNavigateToRecentlyWatched,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                
+                // Category Chips (sticky)
+                stickyHeader {
+                    Surface(
+                        color = MaterialTheme.colorScheme.background,
+                        shadowElevation = if (!isCarouselVisible) 4.dp else 0.dp
+                    ) {
+                        CategoryRow(
+                            categories = listOf("Movies", "TV Shows"),
+                            selectedCategory = when (currentContentType) {
+                                MainViewModel.ContentType.MOVIES -> "Movies"
+                                MainViewModel.ContentType.TV_SHOWS -> "TV Shows"
+                                else -> "Movies"
+                            },
+                            onCategorySelected = { category ->
+                                isSearchActive = false
+                                searchQuery = ""
+                                viewModel.clearSearch()
+                                when (category) {
+                                    "Movies" -> viewModel.setContentType(MainViewModel.ContentType.MOVIES)
+                                    "TV Shows" -> viewModel.setContentType(MainViewModel.ContentType.TV_SHOWS)
+                                }
+                            },
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                }
                 
                 // Content
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f)
-                ) {
-                    when {
-                        currentContentType == MainViewModel.ContentType.RECENTLY_WATCHED -> {
-                            RecentlyWatchedSection(
-                                viewModel = viewModel,
-                                onItemClick = onNavigateToRecentlyWatched
+                when {
+                    isLoading || isSearching -> {
+                        item { LoadingGrid() }
+                    }
+                    error != null && !isSearchActive -> {
+                        item {
+                            ErrorState(
+                                message = error ?: "Something went wrong",
+                                onRetry = { 
+                                    when (currentContentType) {
+                                        MainViewModel.ContentType.MOVIES -> viewModel.loadMovies()
+                                        MainViewModel.ContentType.TV_SHOWS -> viewModel.loadTVShows()
+                                    }
+                                }
                             )
                         }
-                        isLoading || isSearching -> LoadingGrid()
-                        error != null && !isSearchActive -> ErrorState(
-                            message = error ?: "Something went wrong",
-                            onRetry = { 
-                                when (currentContentType) {
-                                    MainViewModel.ContentType.MOVIES -> viewModel.loadMovies()
-                                    MainViewModel.ContentType.TV_SHOWS -> viewModel.loadTVShows()
-                                    else -> {}
+                    }
+                    displayItems.isEmpty() -> {
+                        item {
+                            EmptyState(
+                                message = when {
+                                    isSearchActive -> "No results found for \"$searchQuery\""
+                                    currentContentType == MainViewModel.ContentType.TV_SHOWS -> "No TV shows available"
+                                    else -> "No movies available"
                                 }
-                            }
-                        )
-                        displayItems.isEmpty() -> EmptyState(
-                            message = when {
-                                isSearchActive -> "No results found for \"$searchQuery\""
-                                currentContentType == MainViewModel.ContentType.TV_SHOWS -> "No TV shows available"
-                                else -> "No movies available"
-                            }
-                        )
-                        else -> {
-                            LazyVerticalGrid(
-                                columns = GridCells.Adaptive(minSize = 140.dp),
-                                contentPadding = PaddingValues(16.dp),
+                            )
+                        }
+                    }
+                    else -> {
+                        // Grid layout using FlowRow within LazyColumn item
+                        item {
+                            FlowRow(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.fillMaxSize()
+                                maxItemsInEachRow = 3
                             ) {
-                                items(
-                                    items = displayItems,
-                                    key = { it.id }
-                                ) { item ->
+                                displayItems.forEach { item ->
                                     MovieCard(
                                         movie = item,
                                         onClick = {
                                             onNavigateToStreams(item.id, item.type, item.name, item.poster)
-                                        }
+                                        },
+                                        modifier = Modifier.weight(1f, fill = false)
                                     )
                                 }
                             }
@@ -323,10 +384,11 @@ fun CategoryRow(
 @Composable
 fun MovieCard(
     movie: Meta,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
@@ -342,41 +404,16 @@ fun MovieCard(
                     .fillMaxWidth()
                     .aspectRatio(2f / 3f)
             ) {
-                SubcomposeAsyncImage(
+                AsyncImage(
                     model = movie.poster,
                     contentDescription = movie.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                    loading = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    },
-                    error = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Outlined.Movie,
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp),
-                                tint = TextSecondary
-                            )
-                        }
-                    }
+                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    placeholder = painterResource(android.R.drawable.ic_menu_gallery),
+                    error = painterResource(android.R.drawable.ic_menu_gallery)
                 )
                 
                 // Gradient overlay at bottom for better text contrast
@@ -427,17 +464,21 @@ fun MovieCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LoadingGrid() {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 140.dp),
-        contentPadding = PaddingValues(16.dp),
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxSize()
+        maxItemsInEachRow = 3
     ) {
-        items(12) {
-            LoadingCard()
+        repeat(12) {
+            Box(modifier = Modifier.weight(1f, fill = false)) {
+                LoadingCard()
+            }
         }
     }
 }
@@ -571,33 +612,228 @@ private fun Brush.Companion.shimmer(colors: List<Color>): Brush {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecentlyWatchedSection(
+fun ContinueWatchingCarousel(
     viewModel: MainViewModel,
-    onItemClick: () -> Unit
+    onItemClick: (WatchProgress) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val watchHistory by viewModel.watchHistory.collectAsState()
+    val haptic = LocalHapticFeedback.current
     
-    if (watchHistory.isEmpty()) {
-        EmptyState("No watch history yet\nMovies and shows you watch will appear here")
-    } else {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 140.dp),
-            contentPadding = PaddingValues(16.dp),
+    // Filter out completed items (>= 90% watched)
+    val unfinishedItems = watchHistory.filter { !it.isCompleted && it.getProgressPercent() < 90 }
+    
+    // Selection state for multi-select removal
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedItems by remember { mutableStateOf(setOf<String>()) }
+    
+    // Reset selection when items change or leaving selection mode
+    LaunchedEffect(unfinishedItems.size, selectionMode) {
+        if (!selectionMode) {
+            selectedItems = emptySet()
+        }
+    }
+    
+    if (unfinishedItems.isEmpty()) {
+        return // Don't show section if empty
+    }
+    
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Header with title and delete button (shown in selection mode)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Continue Watching",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            
+            if (selectionMode) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Cancel button
+                    TextButton(
+                        onClick = { 
+                            selectionMode = false
+                            selectedItems = emptySet()
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                    
+                    // Delete button (only if items selected)
+                    if (selectedItems.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                selectedItems.forEach { id ->
+                                    viewModel.removeFromWatchHistory(id)
+                                }
+                                selectionMode = false
+                                selectedItems = emptySet()
+                            }
+                        ) {
+                            Text(
+                                "Delete (${selectedItems.size})",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Horizontal carousel
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxWidth()
         ) {
             items(
-                items = watchHistory,
+                items = unfinishedItems,
                 key = { it.id }
             ) { item ->
-                WatchHistoryCard(
+                val isSelected = selectedItems.contains(item.id)
+                
+                ContinueWatchingCard(
                     item = item,
-                    onClick = onItemClick
+                    isSelected = isSelected,
+                    selectionMode = selectionMode,
+                    onClick = {
+                        if (selectionMode) {
+                            selectedItems = if (isSelected) {
+                                selectedItems - item.id
+                            } else {
+                                selectedItems + item.id
+                            }
+                        } else {
+                            onItemClick(item)
+                        }
+                    },
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        if (!selectionMode) {
+                            selectionMode = true
+                            selectedItems = setOf(item.id)
+                        }
+                    }
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ContinueWatchingCard(
+    item: WatchProgress,
+    isSelected: Boolean,
+    selectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    val selectionAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 0.6f else 1f,
+        label = "selectionAlpha"
+    )
+    
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongPress() }
+                )
+            }
+            .alpha(selectionAlpha)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+        ) {
+            // Poster - use regular AsyncImage to avoid SubcomposeLayout issues
+            AsyncImage(
+                model = item.poster,
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                placeholder = painterResource(android.R.drawable.ic_menu_gallery),
+                error = painterResource(android.R.drawable.ic_menu_gallery)
+            )
+            
+            // Selection overlay
+            if (selectionMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isSelected) 
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            else 
+                                Color.Black.copy(alpha = 0.3f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White
+                    )
+                }
+            }
+            
+            // Progress indicator at bottom
+            LinearProgressIndicator(
+                progress = item.getProgressPercent() / 100f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .align(Alignment.BottomCenter),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+        
+        // Title
+        Text(
+            text = item.name,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        
+        // Episode info for TV shows
+        item.getEpisodeDisplay()?.let { episodeInfo ->
+            Text(
+                text = episodeInfo,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        
+        // Progress text
+        Text(
+            text = "${item.getProgressPercent()}%",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSecondary
+        )
     }
 }
 
@@ -619,35 +855,16 @@ fun WatchHistoryCard(
                     .fillMaxWidth()
                     .aspectRatio(2f / 3f)
             ) {
-                // Poster
-                SubcomposeAsyncImage(
+                // Poster - use regular AsyncImage to avoid SubcomposeLayout issues
+                AsyncImage(
                     model = item.poster,
                     contentDescription = item.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    loading = {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                        }
-                    },
-                    error = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = TextSecondary
-                            )
-                        }
-                    }
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    placeholder = painterResource(android.R.drawable.ic_menu_gallery),
+                    error = painterResource(android.R.drawable.ic_menu_gallery)
                 )
                 
                 // Progress indicator

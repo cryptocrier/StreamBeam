@@ -31,7 +31,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var realDebridManager: RealDebridManager? = null
     
     // Content type enum
-    enum class ContentType { RECENTLY_WATCHED, MOVIES, TV_SHOWS }
+    enum class ContentType { MOVIES, TV_SHOWS }
     
     private val _currentContentType = MutableStateFlow(ContentType.MOVIES)
     val currentContentType: StateFlow<ContentType> = _currentContentType
@@ -84,6 +84,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Watch History
     private val _watchHistory = MutableStateFlow<List<WatchProgress>>(emptyList())
     val watchHistory: StateFlow<List<WatchProgress>> = _watchHistory
+    
+    // Current episode context for season pack selection
+    private var _currentSeason: Int? = null
+    private var _currentEpisode: Int? = null
+    
+    // Torrent processing state for UI
+    data class TorrentProcessingState(
+        val isProcessing: Boolean = false,
+        val statusMessage: String = "",
+        val posterUrl: String? = null,
+        val title: String = ""
+    )
+    private val _torrentProcessingState = MutableStateFlow(TorrentProcessingState())
+    val torrentProcessingState: StateFlow<TorrentProcessingState> = _torrentProcessingState
     
     init {
         loadMovies()
@@ -152,7 +166,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         when (type) {
             ContentType.MOVIES -> if (_movies.value.isEmpty()) loadMovies()
             ContentType.TV_SHOWS -> if (_tvShows.value.isEmpty()) loadTVShows()
-            ContentType.RECENTLY_WATCHED -> { /* No loading needed, watch history is already loaded */ }
         }
     }
     
@@ -186,7 +199,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         duration: Long,
         season: Int? = null,
         episode: Int? = null,
-        episodeTitle: String? = null
+        episodeTitle: String? = null,
+        streamUrl: String? = null
     ) {
         viewModelScope.launch {
             val id = WatchProgress.createId(metaId, season, episode)
@@ -202,7 +216,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 position = position,
                 duration = duration,
                 lastWatched = System.currentTimeMillis(),
-                isCompleted = position > 0 && duration > 0 && position >= duration * 0.9 // 90% watched = completed
+                isCompleted = position > 0 && duration > 0 && position >= duration * 0.9, // 90% watched = completed
+                streamUrl = streamUrl
             )
             dataStoreManager.saveWatchProgress(progress)
             android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Saved watch progress: $name at ${progress.getProgressPercent()}%")
@@ -517,7 +532,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedTVShow.value = null
         _error.value = null // Clear error when leaving TV show detail
     }
-
+    
+    /**
+     * Get the next episode info for auto-play functionality
+     * Returns: Triple of (episodeId, episodeTitle, hasNextEpisode)
+     */
+    fun getNextEpisode(seriesId: String, currentSeason: Int, currentEpisode: Int): Triple<String?, String?, Boolean> {
+        val tvShow = _selectedTVShow.value
+        
+        // If we have the TV show loaded with videos
+        if (tvShow != null && tvShow.id == seriesId && tvShow.videos != null) {
+            val videos = tvShow.videos
+            
+            // Try to find next episode in current season
+            val nextEpisode = videos.find { 
+                it.season == currentSeason && it.episode == currentEpisode + 1 
+            }
+            
+            if (nextEpisode != null) {
+                val epId = "${seriesId}:${nextEpisode.season}:${nextEpisode.episode}"
+                val epTitle = "${tvShow.name} - S${nextEpisode.season}:E${nextEpisode.episode}${nextEpisode.title?.let { " - $it" } ?: ""}"
+                return Triple(epId, epTitle, true)
+            }
+            
+            // Try to find episode 1 of next season
+            val nextSeasonFirstEpisode = videos.find { 
+                it.season == currentSeason + 1 && it.episode == 1 
+            }
+            
+            if (nextSeasonFirstEpisode != null) {
+                val epId = "${seriesId}:${nextSeasonFirstEpisode.season}:${nextSeasonFirstEpisode.episode}"
+                val epTitle = "${tvShow.name} - S${nextSeasonFirstEpisode.season}:E${nextSeasonFirstEpisode.episode}${nextSeasonFirstEpisode.title?.let { " - $it" } ?: ""}"
+                return Triple(epId, epTitle, true)
+            }
+        }
+        
+        // Fallback: just increment episode number (assume same season)
+        return Triple("${seriesId}:${currentSeason}:${currentEpisode + 1}", null, false)
+    }
     
     fun loadStreams(metaId: String, type: String = "movie", season: Int? = null, episode: Int? = null) {
         viewModelScope.launch {
@@ -526,19 +578,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _groupedStreams.value = emptyMap()
             _streamLoadingState.value = StreamLoadingState.Loading
             
-            // Build the proper ID for TV episodes
-            // Format: seriesId:season:episode (e.g., tt0944947:1:1)
-            val streamId = when {
-                type == "series" && season != null && episode != null -> "$metaId:$season:$episode"
-                type == "series" && metaId.contains(":") -> metaId // Already has season:episode
+            // Parse season/episode from metaId if present (format: seriesId:season:episode)
+            var targetSeason = season
+            var targetEpisode = episode
+            val actualMetaId = when {
+                metaId.contains(":") && type == "series" -> {
+                    val parts = metaId.split(":")
+                    if (parts.size >= 3) {
+                        targetSeason = parts[1].toIntOrNull()
+                        targetEpisode = parts[2].toIntOrNull()
+                        parts[0]
+                    } else metaId
+                }
                 else -> metaId
             }
             
-            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Loading streams for: $streamId (type: $type)")
+            // Store current season/episode for torrent processing
+            _currentSeason = targetSeason
+            _currentEpisode = targetEpisode
+            
+            // Build the proper ID for TV episodes
+            // Format: seriesId:season:episode (e.g., tt0944947:1:1)
+            val streamId = when {
+                type == "series" && targetSeason != null && targetEpisode != null -> "$actualMetaId:$targetSeason:$targetEpisode"
+                type == "series" && metaId.contains(":") -> metaId // Already has season:episode
+                else -> actualMetaId
+            }
+            
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "=== LOAD STREAMS ===")
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Request: metaId=$actualMetaId, type=$type, season=$targetSeason, episode=$targetEpisode")
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Stream ID: $streamId")
             
             // Get preferred languages for filtering
             val preferredLangs = _preferredLanguages.value
-            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Preferred languages: $preferredLangs")
+            val isEnglishPreferred = preferredLangs.contains("en") && preferredLangs.size == 1
+            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Preferred languages: $preferredLangs (English only: $isEnglishPreferred)")
             
             // Build addon URLs with language filters
             // Comet format: /language=de,en/ or /language=de/
@@ -549,12 +623,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val addonConfigs = buildList {
                 // Torrentio variants
                 add(Triple(
-                    "${Constants.Addons.TORRENTIO_BASE}${if (preferredLangs != setOf("en")) "language=$langParam/" else ""}", 
+                    "${Constants.Addons.TORRENTIO_BASE}${if (!isEnglishPreferred) "language=$langParam/" else ""}", 
                     "Torrentio", 
                     "torrentio"
                 ))
                 add(Triple(
-                    "${Constants.Addons.TORRENTIO_BASE}${if (preferredLangs != setOf("en")) "language=$langParam|" else ""}sort=qualitysize|asc/", 
+                    "${Constants.Addons.TORRENTIO_BASE}${if (!isEnglishPreferred) "language=$langParam|" else ""}sort=qualitysize|asc/", 
                     "Torrentio (Quality)", 
                     "torrentio"
                 ))
@@ -600,25 +674,114 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             if (allStreams.isNotEmpty()) {
-                // Group by quality for folder display
-                val qualityGroups = allStreams
-                    .sortedWith(
-                        compareByDescending<Stream> { 
-                            // Language score first
-                            var score = 0
-                            val langs = it.getAudioLanguages()
-                            for (lang in preferredLangs) {
-                                if (langs.contains(lang)) {
-                                    score += if (lang == "en") 10 else 5
-                                }
-                            }
-                            if (it.isMultiAudio()) score += 3
-                            score
-                        }.thenByDescending { 
-                            // Then by seeders
-                            extractSeeders(it.title) 
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "=== LANGUAGE FILTERING ===")
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Preferred: $preferredLangs, Total streams: ${allStreams.size}")
+                
+                // Separate streams by language match
+                val langMatchedStreams = mutableListOf<Pair<Stream, Int>>()  // Stream to priority score
+                val otherStreams = mutableListOf<Stream>()
+                var filteredCount = 0
+                
+                allStreams.forEachIndexed { index, stream ->
+                    val title = stream.title ?: ""
+                    val name = stream.name ?: ""
+                    val combinedText = "${title.uppercase()} ${name.uppercase()}"
+                    
+                    // Use consistent language detection from Stream model
+                    val detectedLangs = stream.getAudioLanguages()
+                    
+                    // AGGRESSIVE filtering: If English is the ONLY preferred language, 
+                    // completely exclude non-English streams
+                    val isNonEnglish = detectedLangs.isNotEmpty() && 
+                        !(detectedLangs.contains("en") && detectedLangs.size == 1) &&
+                        !(detectedLangs.contains("en") && detectedLangs.size > 1 && !isEnglishPreferred)
+                    
+                    if (isEnglishPreferred && isNonEnglish) {
+                        filteredCount++
+                        if (index < 10) {
+                            android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Stream #$index: FILTERED OUT (lang=${detectedLangs}): ${title.take(50)}...")
                         }
-                    )
+                        return@forEachIndexed  // Skip this stream entirely
+                    }
+                    
+                    // Check for explicit English markers
+                    val hasEnglishMarker = combinedText.let { t ->
+                        Regex("[ ._\\-\\[\\(](ENG|ENGLISH|ENG-AUDIO)[ ._\\-\\]\\)]").find(t) != null ||
+                        Regex("[ ._\\-\\[\\(]EN[ ._\\-\\[\\(]?(US|GB|CA|UK|AU)[ ._\\-\\]\\)]").find(t) != null ||
+                        Regex("\\b(ENG|ENGLISH)\\b").find(t) != null
+                    }
+                    
+                    // English detection
+                    val isEnglish = when {
+                        detectedLangs.contains("en") && detectedLangs.size == 1 -> true
+                        detectedLangs.contains("en") && detectedLangs.size > 1 -> true
+                        detectedLangs.isEmpty() && hasEnglishMarker -> true
+                        detectedLangs.isEmpty() -> true  // Unknown = assume English for English preference
+                        else -> false
+                    }
+                    
+                    val matchesPreference = preferredLangs.any { lang ->
+                        when (lang) {
+                            "en" -> isEnglish
+                            else -> detectedLangs.contains(lang)
+                        }
+                    }
+                    
+                    // Check if this is a multi-audio torrent
+                    val isMultiAudio = combinedText.let { t ->
+                        Regex("\\b(MULTI|DUAL|MULTI-AUDIO|DUAL-AUDIO)\\b", RegexOption.IGNORE_CASE).find(t) != null ||
+                        Regex("\\b(MULTI\\s*DL|DUAL\\s*DL)\\b", RegexOption.IGNORE_CASE).find(t) != null
+                    }
+                    
+                    // Calculate episode match score for TV shows
+                    val episodeScore = if (type == "series" && targetSeason != null && targetEpisode != null) {
+                        stream.getEpisodeMatchScore(targetSeason, targetEpisode)
+                    } else 100  // Movies always get max score
+                    
+                    if (index < 20) {
+                        android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Stream #$index: ${title.take(50)}...")
+                        android.util.Log.d(Constants.LogTags.VIEW_MODEL, "  -> langs=$detectedLangs, isEnglish=$isEnglish, multi=$isMultiAudio, epScore=$episodeScore")
+                    }
+                    
+                    if (matchesPreference && episodeScore > 0) {
+                        // Priority score: episode match, then pure English (no multi), then quality, then seeders
+                        val qualityScore = FormatUtils.extractQualityScore(title)
+                        val seederScore = extractSeeders(title)
+                        
+                        // When English is preferred, deprioritize MULTI torrents
+                        // Pure English = +50 bonus, Multi with English = 0, Others = -50
+                        val languageBonus = when {
+                            isEnglishPreferred && isEnglish && !isMultiAudio -> 50  // Pure English preferred
+                            isEnglishPreferred && isEnglish && isMultiAudio -> 0    // Multi with English
+                            else -> 0
+                        }
+                        
+                        // Combine: episode match is most important (100 = exact, 50 = season pack)
+                        val priority = episodeScore * 1000000 + languageBonus * 10000 + qualityScore * 1000 + seederScore
+                        langMatchedStreams.add(stream to priority)
+                    } else {
+                        otherStreams.add(stream)
+                    }
+                }
+                
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "RESULT: Matched=${langMatchedStreams.size}, Filtered=$filteredCount, Other=${otherStreams.size}")
+                
+                // Sort language-matched streams by priority score (descending)
+                val sortedLangMatched = langMatchedStreams
+                    .sortedByDescending { it.second }
+                    .map { it.first }
+                
+                // Sort other streams by quality and seeders
+                val sortedOther = otherStreams.sortedWith(
+                    compareByDescending<Stream> { FormatUtils.extractQualityScore(it.title) }
+                        .thenByDescending { extractSeeders(it.title) }
+                )
+                
+                // Combine: preferred language streams first, then others
+                val allSortedStreams = sortedLangMatched + sortedOther
+                
+                // Group by quality for folder display
+                val qualityGroups = allSortedStreams
                     .groupBy { extractQualityCategory(it.title ?: "") }
                 
                 // Sort by quality priority: 4K HDR, 4K, 1080p, 720p, SD
@@ -653,15 +816,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun processTorrentAndPlay(
         infoHash: String,
         title: String,
+        posterUrl: String? = null,
         onUrlReady: (String) -> Unit
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            _error.value = "Adding to Real-Debrid..."
+            _torrentProcessingState.value = TorrentProcessingState(
+                isProcessing = true,
+                statusMessage = "Adding to Real-Debrid...",
+                posterUrl = posterUrl,
+                title = title
+            )
             
             try {
                 val apiKey = _realDebridKey.value
                 if (apiKey.isBlank()) {
+                    _torrentProcessingState.value = TorrentProcessingState(
+                        isProcessing = false,
+                        statusMessage = "Real-Debrid not configured"
+                    )
                     _error.value = "Real-Debrid API key not configured.\n\nPlease go to Settings and add your Real-Debrid API token."
                     return@launch
                 }
@@ -670,21 +843,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     realDebridManager = RealDebridManager(apiKey)
                 }
                 
-                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Processing torrent: $infoHash")
+                android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Processing torrent: $infoHash for S${_currentSeason}E${_currentEpisode}")
+                _torrentProcessingState.value = _torrentProcessingState.value.copy(
+                    statusMessage = "Adding torrent to Real-Debrid..."
+                )
                 val magnet = "magnet:?xt=urn:btih:$infoHash"
                 
-                val streamingUrl = realDebridManager?.getStreamingUrl(magnet)
+                _torrentProcessingState.value = _torrentProcessingState.value.copy(
+                    statusMessage = "Waiting for download to start..."
+                )
+                val streamingUrl = realDebridManager?.getStreamingUrl(magnet, _currentSeason, _currentEpisode)
                     ?: throw RealDebridException("Failed to get streaming URL")
                 
                 android.util.Log.d(Constants.LogTags.VIEW_MODEL, "Got streaming URL successfully")
+                _torrentProcessingState.value = TorrentProcessingState()
                 _error.value = null
                 onUrlReady(streamingUrl)
                 
             } catch (e: RealDebridException) {
                 android.util.Log.e(Constants.LogTags.VIEW_MODEL, "Real-Debrid error: ${e.message}", e)
+                _torrentProcessingState.value = TorrentProcessingState(
+                    isProcessing = false,
+                    statusMessage = e.message ?: "Real-Debrid error"
+                )
                 _error.value = e.message ?: "Real-Debrid error"
             } catch (e: Exception) {
                 android.util.Log.e(Constants.LogTags.VIEW_MODEL, "Error processing torrent: ${e.message}", e)
+                _torrentProcessingState.value = TorrentProcessingState(
+                    isProcessing = false,
+                    statusMessage = e.message ?: "Unknown error"
+                )
                 _error.value = "Error: ${e.message ?: "Unknown error"}"
             } finally {
                 _isLoading.value = false
@@ -701,7 +889,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     stream.url != null -> stream.url
                     stream.infoHash != null && realDebridManager != null -> {
                         val magnet = "magnet:?xt=urn:btih:${stream.infoHash}"
-                        realDebridManager?.getStreamingUrl(magnet)
+                        realDebridManager?.getStreamingUrl(magnet, _currentSeason, _currentEpisode)
                     }
                     else -> null
                 }
@@ -773,6 +961,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             
             else -> "Unknown"
         }
+    }
+    
+    /**
+     * Check if title has explicit non-English language markers
+     */
+    private fun hasNonEnglishLanguageMarker(title: String?): Boolean {
+        if (title == null) return false
+        val upper = title.uppercase()
+        
+        // Common non-English markers in torrent names - be very strict
+        val patterns = listOf(
+            // French
+            Regex("\\b(FRA|FRE|FRENCH|FRANCAIS|VF|VFF|VFQ)\\b"),
+            // German  
+            Regex("\\b(GER|DEU|GERMAN|DEUTSCH)\\b"),
+            // Spanish
+            Regex("\\b(SPA|ESP|SPANISH|ESPANOL|LATINO|LAT)\\b"),
+            // Italian
+            Regex("\\b(ITA|ITALIAN|ITALIANO)\\b"),
+            // Portuguese
+            Regex("\\b(POR|PORTUGUESE|PORTUGUES)\\b"),
+            // Russian
+            Regex("\\b(RUS|RUSSIAN)\\b"),
+            // Japanese
+            Regex("\\b(JPN|JAP|JAPANESE)\\b"),
+            // Korean
+            Regex("\\b(KOR|KOREAN)\\b"),
+            // Chinese
+            Regex("\\b(CHI|CHN|CHINESE)\\b"),
+            // Polish
+            Regex("\\b(POL|POLISH|POLSKI)\\b"),
+            // Dutch
+            Regex("\\b(DUT|DUTCH|NEDERLANDS)\\b"),
+            // Turkish
+            Regex("\\b(TUR|TURKISH)\\b"),
+            // Arabic
+            Regex("\\b(ARA|ARABIC)\\b")
+        )
+        
+        return patterns.any { it.find(upper) != null }
     }
     
     private fun extractSeeders(title: String?): Int {

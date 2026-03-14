@@ -236,6 +236,21 @@ class CastManager(private val context: Context) {
             .setMetadata(mediaMetadata)
             .setCustomData(customData)
         
+        // Add explicit audio tracks if we have detected multiple languages
+        // This helps the Default Media Receiver expose track switching
+        if (detectedAudioLanguages.size > 1) {
+            val mediaTracks = detectedAudioLanguages.mapIndexed { index, langCode ->
+                com.google.android.gms.cast.MediaTrack.Builder(index.toLong(), com.google.android.gms.cast.MediaTrack.TYPE_AUDIO)
+                    .setName(getLanguageName(langCode))
+                    .setLanguage(langCode)
+                    .setContentType("audio/mp4") // Generic, receiver will detect actual codec
+                    .setSubtype(com.google.android.gms.cast.MediaTrack.SUBTYPE_NONE)
+                    .build()
+            }
+            mediaInfoBuilder.setMediaTracks(mediaTracks)
+            android.util.Log.d(Constants.LogTags.CAST, "Added ${mediaTracks.size} explicit audio tracks: $detectedAudioLanguages")
+        }
+        
         // Set stream duration if known (helps with seeking and progress display)
         if (durationMs > 0) {
             mediaInfoBuilder.setStreamDuration(durationMs)

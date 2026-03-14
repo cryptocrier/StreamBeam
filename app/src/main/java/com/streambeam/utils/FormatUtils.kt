@@ -193,11 +193,23 @@ object FormatUtils {
             }
         }
         
-        // Bonus for MULTI audio
-        if (stream.isMultiAudio()) {
-            score += Constants.Streams.MULTI_AUDIO_BONUS
-        }
-        
+        // Note: MULTI audio bonus removed - user prefers strict language matching
         return score
+    }
+    
+    /**
+     * Extract quality score for sorting (higher = better quality).
+     * Returns: 4 for 4K, 3 for 1080p, 2 for 720p, 1 for SD
+     */
+    fun extractQualityScore(title: String?): Int {
+        if (title == null) return 0
+        val titleUpper = title.uppercase()
+        
+        return when {
+            titleUpper.contains("4K") || titleUpper.contains("2160P") -> 4
+            titleUpper.contains("1080P") || titleUpper.contains("1080I") -> 3
+            titleUpper.contains("720P") || titleUpper.contains("720I") -> 2
+            else -> 1
+        }
     }
 }

@@ -53,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -90,7 +91,8 @@ fun PlayerScreen(
     episode: Int? = null,
     episodeTitle: String? = null,
     resumePosition: Long = 0L,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onPlayNextEpisode: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -104,10 +106,62 @@ fun PlayerScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var hasError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    var isFullscreen by remember { mutableStateOf(false) }
     
     // Local seeking state for smooth slider interaction during cast
     var isSeeking by remember { mutableStateOf(false) }
     var seekPosition by remember { mutableLongStateOf(0L) }
+    
+    // Track player initialization for AndroidView binding
+    var playerInitialized by remember { mutableStateOf(false) }
+    
+    // Handle fullscreen immersive mode - works on all API levels
+    DisposableEffect(isFullscreen) {
+        val window = activity?.window
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            // API 30+ - Use WindowInsetsController
+            val controller = window?.insetsController
+            if (isFullscreen) {
+                controller?.hide(android.view.WindowInsets.Type.systemBars())
+                controller?.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller?.show(android.view.WindowInsets.Type.systemBars())
+            }
+        } else {
+            // API < 30 - Use deprecated system UI flags
+            @Suppress("DEPRECATION")
+            val decorView = window?.decorView
+            if (isFullscreen) {
+                decorView?.systemUiVisibility = (
+                    android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                )
+            } else {
+                decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+            }
+        }
+        
+        onDispose {
+            // Restore system bars when leaving screen
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                window?.insetsController?.show(android.view.WindowInsets.Type.systemBars())
+            } else {
+                @Suppress("DEPRECATION")
+                window?.decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+            }
+        }
+    }
+    
+    // Ensure player is bound to view - force recomposition when player becomes available
+    LaunchedEffect(viewModel.castManager.exoPlayer) {
+        if (viewModel.castManager.exoPlayer != null && !playerInitialized) {
+            playerInitialized = true
+        }
+    }
     
     // Auto-hide controls after delay
     LaunchedEffect(showControls) {
@@ -158,6 +212,7 @@ fun PlayerScreen(
     
     DisposableEffect(streamUrl) {
         val player = viewModel.castManager.initializePlayer()
+        playerInitialized = true
         
         // Add listener to track player state
         val listener = object : Player.Listener {
@@ -173,6 +228,11 @@ fun PlayerScreen(
                     }
                     Player.STATE_ENDED -> {
                         isPlaying = false
+                        // Auto-play next episode when video naturally ends for TV shows
+                        if (type == "series" && onPlayNextEpisode != null) {
+                            android.util.Log.d(Constants.LogTags.PLAYER, "Video ended, auto-playing next episode")
+                            onPlayNextEpisode.invoke()
+                        }
                     }
                     Player.STATE_IDLE -> {
                         isReady = false
@@ -227,19 +287,46 @@ fun PlayerScreen(
         onDispose {
             player.removeListener(listener)
             
-            // Save watch progress before leaving
+            // Calculate progress percentage
+            val progressPercent = if (duration > 0) {
+                (currentPosition.toFloat() / duration * 100).toInt()
+            } else 0
+            
+            // Check if completed (>90% watched) - remove from history
+            val isCompleted = progressPercent >= 90
+            
+            // Check if credits are starting (85-90% range) - auto-play next episode for TV shows
+            val isCreditsStarting = progressPercent in 85..89 && type == "series" && onPlayNextEpisode != null
+            
             if (metaId != null && duration > 0) {
-                viewModel.saveWatchProgress(
-                    metaId = metaId,
-                    type = type,
-                    name = title,
-                    poster = posterUrl,
-                    position = currentPosition,
-                    duration = duration,
-                    season = season,
-                    episode = episode,
-                    episodeTitle = episodeTitle
-                )
+                if (isCompleted) {
+                    // Remove from watch history when completed
+                    val id = if (season != null && episode != null) {
+                        com.streambeam.model.WatchProgress.createId(metaId, season, episode)
+                    } else metaId
+                    viewModel.removeFromWatchHistory(id)
+                    android.util.Log.d(Constants.LogTags.PLAYER, "Removed completed item from history: $title")
+                } else {
+                    // Save watch progress
+                    viewModel.saveWatchProgress(
+                        metaId = metaId,
+                        type = type,
+                        name = title,
+                        poster = posterUrl,
+                        position = currentPosition,
+                        duration = duration,
+                        season = season,
+                        episode = episode,
+                        episodeTitle = episodeTitle,
+                        streamUrl = streamUrl
+                    )
+                }
+            }
+            
+            // Auto-play next episode if credits are starting
+            if (isCreditsStarting) {
+                android.util.Log.d(Constants.LogTags.PLAYER, "Credits starting, auto-playing next episode")
+                onPlayNextEpisode?.invoke()
             }
             
             // Only stop local playback when leaving
@@ -344,17 +431,119 @@ fun PlayerScreen(
                     )
                 } else {
                     // Local player with PlayerView (includes default controls)
-                    AndroidView(
-                        factory = { ctx ->
-                            PlayerView(ctx).apply {
-                                player = viewModel.castManager.exoPlayer
-                                useController = true // Use default controls
-                                setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                                setBackgroundColor(android.graphics.Color.BLACK)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        key(playerInitialized) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    PlayerView(ctx).apply {
+                                        player = viewModel.castManager.exoPlayer
+                                        useController = true // Use default controls
+                                        resizeMode = if (isFullscreen) {
+                                            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                        } else {
+                                            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                        }
+                                        setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                                        setBackgroundColor(android.graphics.Color.BLACK)
+                                    }
+                                },
+                                update = { playerView ->
+                                    // Ensure player is bound (handles race condition with DisposableEffect)
+                                    if (playerView.player != viewModel.castManager.exoPlayer) {
+                                        playerView.player = viewModel.castManager.exoPlayer
+                                    }
+                                    // Update resize mode when fullscreen changes
+                                    playerView.resizeMode = if (isFullscreen) {
+                                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                    } else {
+                                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        
+                        // Top controls overlay - only show in non-fullscreen mode
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = !isFullscreen && showControls,
+                            enter = fadeIn(),
+                            exit = fadeOut(),
+                            modifier = Modifier.align(Alignment.TopStart)
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Back button
+                                    IconButton(
+                                        onClick = onBack,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowBack,
+                                            contentDescription = "Back",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                    
+                                    // Fullscreen toggle
+                                    IconButton(
+                                        onClick = { isFullscreen = !isFullscreen },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        // Draw a simple fullscreen icon using Box with borders
+                                        Box(
+                                            modifier = Modifier.size(24.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            // Outer square with corners
+                                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                                                val strokeWidth = 3f
+                                                val color = androidx.compose.ui.graphics.Color.White
+                                                val width = size.width
+                                                val height = size.height
+                                                val cornerSize = width * 0.3f
+                                                
+                                                // Draw four corners to make an open square
+                                                // Top-left
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(cornerSize, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, cornerSize), strokeWidth)
+                                                
+                                                // Top-right
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width, cornerSize), strokeWidth)
+                                                
+                                                // Bottom-left
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(cornerSize, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(0f, height - cornerSize), strokeWidth)
+                                                
+                                                // Bottom-right
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width - cornerSize, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width, height - cornerSize), strokeWidth)
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Title shown below controls in non-fullscreen mode
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .padding(top = 72.dp, start = 16.dp, end = 16.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
                     
                     // Error overlay
                     if (hasError) {
@@ -409,7 +598,7 @@ fun AudioTrackSelector(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Audio Language (Local Only)",
+            text = "Audio Language",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -421,7 +610,7 @@ fun AudioTrackSelector(
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
             else 
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-            modifier = Modifier.clickable(enabled = !isCasting) { expanded = !expanded }
+            modifier = Modifier.clickable { expanded = !expanded }
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -429,11 +618,11 @@ fun AudioTrackSelector(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = if (isCasting) "$currentTrackName (Cast: Locked)" else currentTrackName,
+                    text = currentTrackName,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isCasting) TextSecondary else Color.White
+                    color = Color.White
                 )
-                if (!isCasting) {
+                if (true) { // Always show dropdown arrow
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = if (expanded) "Collapse" else "Expand",
@@ -672,6 +861,17 @@ fun CastingOverlay(
         }
         
         Spacer(modifier = Modifier.height(16.dp))
+        
+        // Audio track selector (only show if multiple tracks available)
+        if (availableAudioTracks.size > 1) {
+            AudioTrackSelector(
+                tracks = availableAudioTracks,
+                currentTrackId = currentAudioTrackId,
+                onSelectTrack = onSelectAudioTrack,
+                isCasting = false // Enable track switching for casting with explicit tracks
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
         
         // Playback controls with 15s rewind and 30s fast forward
         Row(

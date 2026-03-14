@@ -17,7 +17,8 @@ data class WatchProgress(
     @SerializedName("position") val position: Long,          // Current position in milliseconds
     @SerializedName("duration") val duration: Long,          // Total duration in milliseconds
     @SerializedName("lastWatched") val lastWatched: Long,    // Timestamp
-    @SerializedName("isCompleted") val isCompleted: Boolean = false // Whether finished
+    @SerializedName("isCompleted") val isCompleted: Boolean = false, // Whether finished
+    @SerializedName("streamUrl") val streamUrl: String? = null // Last played stream URL for resume
 ) {
     /**
      * Returns progress percentage (0-100)

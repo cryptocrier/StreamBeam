@@ -2,7 +2,12 @@ package com.streambeam.ui.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,8 +56,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +73,7 @@ import com.streambeam.ui.theme.Quality720p
 import com.streambeam.ui.theme.QualitySD
 import com.streambeam.ui.theme.TextSecondary
 import com.streambeam.viewmodel.MainViewModel
+import coil.compose.SubcomposeAsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +91,7 @@ fun StreamSelectionScreen(
     val error by viewModel.error.collectAsState()
     val realDebridKey by viewModel.realDebridKey.collectAsState()
     val preferredLanguages by viewModel.preferredLanguages.collectAsState()
+    val torrentProcessing by viewModel.torrentProcessingState.collectAsState()
     val isRealDebridConfigured = realDebridKey.isNotBlank()
     
     LaunchedEffect(metaId) {
@@ -91,14 +101,6 @@ fun StreamSelectionScreen(
     // Calculate total streams for header
     val totalStreams = remember(groupedStreams) {
         groupedStreams.values.sumOf { it.size }
-    }
-    
-    // Get all streams with MULTI audio for special handling
-    val allStreams = remember(groupedStreams) {
-        groupedStreams.values.flatten()
-    }
-    val multiAudioStreams = remember(allStreams) {
-        allStreams.filter { it.isMultiAudio() }
     }
     
     Scaffold(
@@ -140,6 +142,13 @@ fun StreamSelectionScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             when {
+                torrentProcessing.isProcessing -> {
+                    TorrentLoadingScreen(
+                        title = torrentProcessing.title,
+                        posterUrl = torrentProcessing.posterUrl,
+                        statusMessage = torrentProcessing.statusMessage
+                    )
+                }
                 isLoading -> LoadingStreamsList()
                 error != null -> StreamErrorState(
                     message = error ?: "Failed to load streams",
@@ -178,16 +187,6 @@ fun StreamSelectionScreen(
                             )
                         }
                         
-                        // MULTI audio info banner
-                        if (multiAudioStreams.isNotEmpty()) {
-                            item {
-                                MultiAudioInfoBanner(
-                                    count = multiAudioStreams.size,
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                )
-                            }
-                        }
-                        
                         // Grouped streams by quality folder
                         groupedStreams.forEach { (quality, streams) ->
                             // Section header for each quality folder
@@ -218,6 +217,7 @@ fun StreamSelectionScreen(
                                             viewModel.processTorrentAndPlay(
                                                 infoHash = stream.infoHash,
                                                 title = title,
+                                                posterUrl = posterUrl,
                                                 onUrlReady = { processedUrl ->
                                                     onNavigateToPlayer(processedUrl)
                                                 }
@@ -491,8 +491,6 @@ fun StreamCard(
     val quality = extractQuality(title)
     val size = extractSize(title)
     val seeds = extractSeeders(title)
-    val isMulti = stream.isMultiAudio()
-    val languages = if (isMulti) stream.getAudioLanguages() else emptyList()
     
     // Extract addon source from name (format: "Name [Addon]")
     val sourceRegex = Regex("\\s*\\[(.+?)\\]\\s*$")
@@ -596,11 +594,6 @@ fun StreamCard(
                     // Quality badge
                     QualityBadge(quality = quality)
                     
-                    // MULTI badge
-                    if (isMulti) {
-                        MultiBadge()
-                    }
-                    
                     // Size
                     if (size.isNotEmpty()) {
                         Text(
@@ -645,6 +638,19 @@ fun StreamCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                
+                // Full torrent title (helps verify language markers)
+                val fullTitle = stream.title
+                if (!fullTitle.isNullOrBlank() && fullTitle != displayName) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "📁 $fullTitle",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary.copy(alpha = 0.8f),
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -888,6 +894,148 @@ fun EmptyStreamsState() {
             color = TextSecondary,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+fun TorrentLoadingScreen(
+    title: String,
+    posterUrl: String?,
+    statusMessage: String,
+    modifier: Modifier = Modifier
+) {
+    // Create infinite pulsing animation for title
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = androidx.compose.animation.core.EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+    
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            // Poster with shadow/glow effect
+            Box(
+                modifier = Modifier
+                    .height(280.dp)
+                    .aspectRatio(2f / 3f),
+                contentAlignment = Alignment.Center
+            ) {
+                // Glow effect behind poster
+                if (posterUrl != null) {
+                    SubcomposeAsyncImage(
+                        model = posterUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                            .blur(20.dp),
+                        loading = { Box(modifier = Modifier.fillMaxSize()) }
+                    )
+                }
+                
+                // Main poster
+                if (posterUrl != null) {
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        SubcomposeAsyncImage(
+                            model = posterUrl,
+                            contentDescription = title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                            loading = {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(40.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                        )
+                    }
+                } else {
+                    // Fallback poster icon
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(80.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+            
+            // Title with pulsing effect (Stremio-style)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = pulseAlpha),
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            
+            // Custom circular progress with rotation
+            Box(
+                modifier = Modifier.size(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 4.dp,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+            
+            // Status message
+            Text(
+                text = statusMessage,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+            
+            // Additional hint
+            Text(
+                text = "This may take a few moments",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 

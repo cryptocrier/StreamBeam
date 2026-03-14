@@ -117,8 +117,35 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToSettings = {
                                     navController.navigate("settings")
                                 },
-                                onNavigateToRecentlyWatched = {
-                                    navController.navigate("recent")
+                                onNavigateToRecentlyWatched = { watchItem ->
+                                    // Navigate to player or stream selection based on content type
+                                    if (!watchItem.streamUrl.isNullOrEmpty()) {
+                                        // Resume directly with the saved stream URL
+                                        val encodedUrl = URLEncoder.encode(watchItem.streamUrl, StandardCharsets.UTF_8.toString())
+                                        val encodedTitle = URLEncoder.encode(watchItem.getDisplayTitle(), StandardCharsets.UTF_8.toString())
+                                        val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
+                                        val episodeId = if (watchItem.season != null && watchItem.episode != null) {
+                                            "${watchItem.metaId}:${watchItem.season}:${watchItem.episode}"
+                                        } else watchItem.metaId
+                                        val resumeParam = if (watchItem.position > 0) "&resume=${watchItem.position}" else ""
+                                        navController.navigate("player/$encodedUrl?title=$encodedTitle&poster=$encodedPoster&metaId=$episodeId&type=${watchItem.type}$resumeParam") {
+                                            launchSingleTop = true
+                                        }
+                                    } else {
+                                        // No stored stream URL, go to stream selection
+                                        if (watchItem.type == "series") {
+                                            val episodeId = if (watchItem.season != null && watchItem.episode != null) {
+                                                "${watchItem.metaId}:${watchItem.season}:${watchItem.episode}"
+                                            } else watchItem.metaId
+                                            val encodedTitle = URLEncoder.encode(watchItem.getDisplayTitle(), StandardCharsets.UTF_8.toString())
+                                            val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
+                                            navController.navigate("streams/$episodeId/series/$encodedTitle?poster=$encodedPoster")
+                                        } else {
+                                            val encodedTitle = URLEncoder.encode(watchItem.name, StandardCharsets.UTF_8.toString())
+                                            val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
+                                            navController.navigate("streams/${watchItem.metaId}/movie/$encodedTitle?poster=$encodedPoster")
+                                        }
+                                    }
                                 }
                             )
                         }
@@ -126,20 +153,33 @@ class MainActivity : ComponentActivity() {
                             RecentlyWatchedScreen(
                                 viewModel = viewModel,
                                 onItemClick = { watchItem ->
-                                    // Navigate to player or stream selection based on content type
-                                    if (watchItem.type == "series") {
-                                        // For TV shows, go to stream selection
+                                    // Check if we have a stored stream URL to resume directly
+                                    if (!watchItem.streamUrl.isNullOrEmpty()) {
+                                        // Resume directly with the saved stream URL
+                                        val encodedUrl = URLEncoder.encode(watchItem.streamUrl, StandardCharsets.UTF_8.toString())
+                                        val encodedTitle = URLEncoder.encode(watchItem.getDisplayTitle(), StandardCharsets.UTF_8.toString())
+                                        val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
                                         val episodeId = if (watchItem.season != null && watchItem.episode != null) {
                                             "${watchItem.metaId}:${watchItem.season}:${watchItem.episode}"
                                         } else watchItem.metaId
-                                        val encodedTitle = URLEncoder.encode(watchItem.getDisplayTitle(), StandardCharsets.UTF_8.toString())
-                                        val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
-                                        navController.navigate("streams/$episodeId/series/$encodedTitle?poster=$encodedPoster")
+                                        val resumeParam = if (watchItem.position > 0) "&resume=${watchItem.position}" else ""
+                                        navController.navigate("player/$encodedUrl?title=$encodedTitle&poster=$encodedPoster&metaId=$episodeId&type=${watchItem.type}$resumeParam") {
+                                            launchSingleTop = true
+                                        }
                                     } else {
-                                        // For movies, go to stream selection
-                                        val encodedTitle = URLEncoder.encode(watchItem.name, StandardCharsets.UTF_8.toString())
-                                        val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
-                                        navController.navigate("streams/${watchItem.metaId}/movie/$encodedTitle?poster=$encodedPoster")
+                                        // No stored stream URL, go to stream selection
+                                        if (watchItem.type == "series") {
+                                            val episodeId = if (watchItem.season != null && watchItem.episode != null) {
+                                                "${watchItem.metaId}:${watchItem.season}:${watchItem.episode}"
+                                            } else watchItem.metaId
+                                            val encodedTitle = URLEncoder.encode(watchItem.getDisplayTitle(), StandardCharsets.UTF_8.toString())
+                                            val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
+                                            navController.navigate("streams/$episodeId/series/$encodedTitle?poster=$encodedPoster")
+                                        } else {
+                                            val encodedTitle = URLEncoder.encode(watchItem.name, StandardCharsets.UTF_8.toString())
+                                            val encodedPoster = URLEncoder.encode(watchItem.poster ?: "", StandardCharsets.UTF_8.toString())
+                                            navController.navigate("streams/${watchItem.metaId}/movie/$encodedTitle?poster=$encodedPoster")
+                                        }
                                     }
                                 },
                                 onClearAll = {
@@ -315,7 +355,21 @@ class MainActivity : ComponentActivity() {
                                 season = season,
                                 episode = episode,
                                 resumePosition = resumePosition,
-                                onBack = { navController.popBackStack() }
+                                onBack = { navController.popBackStack() },
+                                onPlayNextEpisode = if (type == "series" && cleanMetaId.isNotEmpty() && season != null && episode != null) {
+                                    {
+                                        // Navigate to next episode
+                                        val nextEp = viewModel.getNextEpisode(cleanMetaId, season, episode)
+                                        if (nextEp.third) { // hasNextEpisode
+                                            val nextEpId = nextEp.first ?: "${cleanMetaId}:${season}:${episode + 1}"
+                                            val nextEpTitle = nextEp.second ?: "Next Episode"
+                                            val encodedNextTitle = URLEncoder.encode(nextEpTitle, StandardCharsets.UTF_8.toString())
+                                            navController.navigate("streams/$nextEpId/series/$encodedNextTitle?poster=$encodedPoster") {
+                                                popUpTo("player/$encodedUrl") { inclusive = true }
+                                            }
+                                        }
+                                    }
+                                } else null
                             )
                         }
                         composable("settings") {
