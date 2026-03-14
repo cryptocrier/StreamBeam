@@ -504,10 +504,10 @@ fun PlayerScreen(
                                             // Outer square with corners
                                             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                                                 val strokeWidth = 3f
-                                                val color = androidx.compose.ui.graphics.Color.White
-                                                val width = size.width
-                                                val height = size.height
-                                                val cornerSize = width * 0.3f
+                                                val color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
+                                                val width: Float = size.width
+                                                val height: Float = size.height
+                                                val cornerSize: Float = width * 0.3f
                                                 
                                                 // Draw four corners to make an open square
                                                 // Top-left
@@ -536,14 +536,14 @@ fun PlayerScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     color = Color.White,
                                     maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .padding(top = 72.dp, start = 16.dp, end = 16.dp)
-                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .padding(top = 72.dp, start = 16.dp, end = 16.dp)
+                                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
                         }
-                    }
                     
                     // Error overlay
                     if (hasError) {
