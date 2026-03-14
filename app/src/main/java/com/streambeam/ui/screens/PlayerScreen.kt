@@ -33,7 +33,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Replay5
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material3.Slider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -354,61 +355,12 @@ fun PlayerScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        Scaffold(
-            topBar = {
-                AnimatedVisibility(
-                    visible = showControls,
-                    enter = fadeIn() + slideInVertically(),
-                    exit = fadeOut() + slideOutVertically()
-                ) {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = title,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    Icons.Default.ArrowBack,
-                                    contentDescription = "Back"
-                                )
-                            }
-                        },
-                        actions = {
-                            // Cast button - simple IconButton that toggles cast state
-                            IconButton(
-                                onClick = { 
-                                    activity?.let { viewModel.castManager.toggleCast(it) }
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
-                                    contentDescription = if (isCasting) "Disconnect Cast" else "Cast",
-                                    tint = if (isCasting) MaterialTheme.colorScheme.primary else Color.White
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Black.copy(alpha = 0.7f),
-                            titleContentColor = Color.White,
-                            navigationIconContentColor = Color.White,
-                            actionIconContentColor = Color.White
-                        )
-                    )
-                }
-            },
-            containerColor = Color.Black
-        ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .background(Color.Black)
-            ) {
+        // Main content without Scaffold to avoid double top bars
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
                 // Get available audio tracks when casting
                 val availableAudioTracks by viewModel.castManager.availableAudioTracks.collectAsState()
                 val currentAudioTrackId by viewModel.castManager.currentAudioTrackId.collectAsState()
@@ -536,7 +488,7 @@ fun PlayerScreen(
                             }
                         }
                         
-                        // Bottom control bar with settings and fullscreen
+                        // Bottom control bar with audio, subtitles, and fullscreen buttons
                         AnimatedVisibility(
                             visible = showControls,
                             enter = fadeIn(),
@@ -547,38 +499,29 @@ fun PlayerScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Settings button (cog) - opens audio/subtitle menu
-                                var showSettingsMenu by remember { mutableStateOf(false) }
-                                
-                                Box {
-                                    IconButton(
-                                        onClick = { showSettingsMenu = true },
-                                        modifier = Modifier.size(48.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = "Settings",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                    
-                                    // Settings dropdown menu
-                                    DropdownMenu(
-                                        expanded = showSettingsMenu,
-                                        onDismissRequest = { showSettingsMenu = false },
-                                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
-                                    ) {
-                                        // Audio Tracks Section
-                                        if (availableAudioTracks.isNotEmpty()) {
-                                            DropdownMenuItem(
-                                                text = { Text("Audio Tracks", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-                                                onClick = { },
-                                                enabled = false
+                                // Audio button (only show if tracks available)
+                                if (availableAudioTracks.isNotEmpty()) {
+                                    var showAudioMenu by remember { mutableStateOf(false) }
+                                    Box {
+                                        IconButton(
+                                            onClick = { showAudioMenu = true },
+                                            modifier = Modifier.size(48.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.VolumeUp,
+                                                contentDescription = "Audio",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(28.dp)
                                             )
+                                        }
+                                        DropdownMenu(
+                                            expanded = showAudioMenu,
+                                            onDismissRequest = { showAudioMenu = false },
+                                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                                        ) {
                                             availableAudioTracks.forEach { track ->
                                                 DropdownMenuItem(
                                                     text = {
@@ -597,20 +540,33 @@ fun PlayerScreen(
                                                     },
                                                     onClick = {
                                                         viewModel.castManager.setActiveAudioTrack(track.id)
-                                                        showSettingsMenu = false
+                                                        showAudioMenu = false
                                                     }
                                                 )
                                             }
-                                            Divider()
                                         }
-                                        
-                                        // Subtitles Section
-                                        DropdownMenuItem(
-                                            text = { Text("Subtitles", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-                                            onClick = { },
-                                            enabled = false
+                                    }
+                                }
+                                
+                                // Subtitle button
+                                var showSubtitleMenu by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(
+                                        onClick = { showSubtitleMenu = true },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ClosedCaption,
+                                            contentDescription = "Subtitles",
+                                            tint = if (selectedSubtitle != null) MaterialTheme.colorScheme.primary else Color.White,
+                                            modifier = Modifier.size(28.dp)
                                         )
-                                        
+                                    }
+                                    DropdownMenu(
+                                        expanded = showSubtitleMenu,
+                                        onDismissRequest = { showSubtitleMenu = false },
+                                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
                                         // Off option
                                         DropdownMenuItem(
                                             text = {
@@ -629,32 +585,42 @@ fun PlayerScreen(
                                             },
                                             onClick = {
                                                 viewModel.selectSubtitle(null)
-                                                showSettingsMenu = false
+                                                showSubtitleMenu = false
                                             }
                                         )
                                         
+                                        Divider()
+                                        
                                         // Available subtitles
-                                        availableSubtitles.forEach { subtitle ->
+                                        if (availableSubtitles.isEmpty() && !isLoadingSubtitles) {
                                             DropdownMenuItem(
-                                                text = {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        if (selectedSubtitle?.id == subtitle.id) {
-                                                            Icon(
-                                                                imageVector = Icons.Default.Check,
-                                                                contentDescription = null,
-                                                                modifier = Modifier.size(16.dp),
-                                                                tint = MaterialTheme.colorScheme.primary
-                                                            )
-                                                            Spacer(modifier = Modifier.width(8.dp))
-                                                        }
-                                                        Text("${subtitle.getFlag()} ${subtitle.languageName}")
-                                                    }
-                                                },
-                                                onClick = {
-                                                    viewModel.selectSubtitle(subtitle)
-                                                    showSettingsMenu = false
-                                                }
+                                                text = { Text("No subtitles found", color = TextSecondary) },
+                                                onClick = { },
+                                                enabled = false
                                             )
+                                        } else {
+                                            availableSubtitles.forEach { subtitle ->
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            if (selectedSubtitle?.id == subtitle.id) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Check,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(16.dp),
+                                                                    tint = MaterialTheme.colorScheme.primary
+                                                                )
+                                                                Spacer(modifier = Modifier.width(8.dp))
+                                                            }
+                                                            Text("${subtitle.getFlag()} ${subtitle.languageName}")
+                                                        }
+                                                    },
+                                                    onClick = {
+                                                        viewModel.selectSubtitle(subtitle)
+                                                        showSubtitleMenu = false
+                                                    }
+                                                )
+                                            }
                                         }
                                         
                                         if (isLoadingSubtitles) {
@@ -676,12 +642,24 @@ fun PlayerScreen(
                                     }
                                 }
                                 
+                                // Cast button
+                                IconButton(
+                                    onClick = { activity?.let { viewModel.castManager.toggleCast(it) } },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
+                                        contentDescription = if (isCasting) "Disconnect Cast" else "Cast",
+                                        tint = if (isCasting) MaterialTheme.colorScheme.primary else Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                                
                                 // Fullscreen toggle
                                 IconButton(
                                     onClick = { isFullscreen = !isFullscreen },
                                     modifier = Modifier.size(48.dp)
                                 ) {
-                                    // Fullscreen icon
                                     Box(
                                         modifier = Modifier.size(24.dp),
                                         contentAlignment = Alignment.Center
@@ -689,30 +667,30 @@ fun PlayerScreen(
                                         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                                             val strokeWidth = 3f
                                             val color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
-                                            val width: Float = size.width
-                                            val height: Float = size.height
-                                            val cornerSize: Float = width * 0.3f
+                                            val w: Float = size.width
+                                            val h: Float = size.height
+                                            val cornerSize: Float = w * 0.3f
                                             
                                             if (isFullscreen) {
-                                                // Exit fullscreen icon (corners pointing inward)
+                                                // Exit fullscreen icon
                                                 drawLine(color, androidx.compose.ui.geometry.Offset(0f, cornerSize), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
                                                 drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, 0f), androidx.compose.ui.geometry.Offset(0f, 0f), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, cornerSize), androidx.compose.ui.geometry.Offset(width, 0f), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height - cornerSize), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, height), androidx.compose.ui.geometry.Offset(0f, height), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width - cornerSize, height), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height - cornerSize), androidx.compose.ui.geometry.Offset(width, height), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w - cornerSize, 0f), androidx.compose.ui.geometry.Offset(w, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w, cornerSize), androidx.compose.ui.geometry.Offset(w, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, h - cornerSize), androidx.compose.ui.geometry.Offset(0f, h), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(cornerSize, h), androidx.compose.ui.geometry.Offset(0f, h), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w - cornerSize, h), androidx.compose.ui.geometry.Offset(w, h), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w, h - cornerSize), androidx.compose.ui.geometry.Offset(w, h), strokeWidth)
                                             } else {
-                                                // Enter fullscreen icon (corners pointing outward)
+                                                // Enter fullscreen icon
                                                 drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(cornerSize, 0f), strokeWidth)
                                                 drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, cornerSize), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width - cornerSize, 0f), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, 0f), androidx.compose.ui.geometry.Offset(width, cornerSize), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(cornerSize, height), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, height), androidx.compose.ui.geometry.Offset(0f, height - cornerSize), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width - cornerSize, height), strokeWidth)
-                                                drawLine(color, androidx.compose.ui.geometry.Offset(width, height), androidx.compose.ui.geometry.Offset(width, height - cornerSize), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w, 0f), androidx.compose.ui.geometry.Offset(w - cornerSize, 0f), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w, 0f), androidx.compose.ui.geometry.Offset(w, cornerSize), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, h), androidx.compose.ui.geometry.Offset(cornerSize, h), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(0f, h), androidx.compose.ui.geometry.Offset(0f, h - cornerSize), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w, h), androidx.compose.ui.geometry.Offset(w - cornerSize, h), strokeWidth)
+                                                drawLine(color, androidx.compose.ui.geometry.Offset(w, h), androidx.compose.ui.geometry.Offset(w, h - cornerSize), strokeWidth)
                                             }
                                         }
                                     }
