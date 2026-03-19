@@ -1,8 +1,5 @@
 # StreamBeam
 
-<p align="center">
-  <img src="app/src/main/res/drawable/ic_launcher_foreground.xml" width="128" height="128" alt="StreamBeam Logo">
-</p>
 
 A premium native Android streaming app with built-in Stremio addon support, Real-Debrid integration, and seamless Chromecast casting.
 
