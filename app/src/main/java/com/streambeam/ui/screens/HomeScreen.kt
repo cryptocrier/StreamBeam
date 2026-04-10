@@ -294,7 +294,7 @@ fun HomeScreen(
                                     MovieCard(
                                         movie = item,
                                         onClick = {
-                                            onNavigateToStreams(item.id, item.type, item.name, item.poster)
+                                            onNavigateToStreams(item.id, item.type, item.name ?: "Unknown", item.poster)
                                         },
                                         modifier = Modifier.weight(1f, fill = false)
                                     )
@@ -453,7 +453,7 @@ fun MovieCard(
             
             // Title
             Text(
-                text = movie.name,
+                text = movie.name ?: "Unknown",
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -809,7 +809,7 @@ fun ContinueWatchingCard(
         
         // Title
         Text(
-            text = item.name,
+            text = item.name ?: "Unknown",
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -916,7 +916,7 @@ fun WatchHistoryCard(
             
             // Title
             Text(
-                text = item.name,
+                text = item.name ?: "Unknown",
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

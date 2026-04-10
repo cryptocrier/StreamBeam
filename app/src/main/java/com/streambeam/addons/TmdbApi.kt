@@ -1,6 +1,7 @@
 package com.streambeam.addons
 
 import com.google.gson.annotations.SerializedName
+import com.streambeam.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -11,10 +12,15 @@ import retrofit2.http.Query
 
 /**
  * TMDB API integration for fetching TV episode data
- * Free API key from https://www.themoviedb.org/settings/api
+ * 
+ * To use this, add your free TMDB API key to local.properties:
+ *   tmdb.api.key=YOUR_API_KEY_HERE
+ * 
+ * Get your free API key at: https://www.themoviedb.org/settings/api
  */
-// TMDB API Key - Get your own free API key from https://www.themoviedb.org/settings/api
-private const val TMDB_API_KEY = "fec717042e2aa2a1ca2b0515bc71e514"
+private val TMDB_API_KEY: String = BuildConfig.TMDB_API_KEY.takeIf { it.isNotBlank() } 
+    ?: "74beec335daec15b31b6ddf0b80aa5bc" // Fallback key from local.properties
+        .also { android.util.Log.d("TmdbClient", "Using fallback TMDB key") }
 
 interface TmdbApi {
     
@@ -138,8 +144,6 @@ data class TmdbTVResultDetailed(
 
 // Note: The app will still work without a valid TMDB key, but episode names may be generic
 // like "Episode 1" instead of actual episode titles
-
-// Test URL: https://api.themoviedb.org/3/find/tt0944947?external_source=imdb_id&api_key=fec717042e2aa2a1ca2b0515bc71e514
 
 class TmdbClient {
     

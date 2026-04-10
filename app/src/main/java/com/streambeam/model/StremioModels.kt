@@ -5,7 +5,7 @@ import com.google.gson.annotations.SerializedName
 // Stremio Manifest
 data class Manifest(
     val id: String,
-    val name: String,
+    val name: String?,
     val description: String?,
     val version: String,
     val resources: List<Resource>,
@@ -53,7 +53,7 @@ data class MetaResponse(
 data class Meta(
     val id: String,
     val type: String,
-    val name: String,
+    val name: String?,
     val description: String?,
     val poster: String?,
     val background: String?,
@@ -66,7 +66,7 @@ data class Meta(
 // Video Episode
 data class Video(
     val id: String,
-    val title: String,
+    val title: String?,
     val released: String?,
     val season: Int?,
     val episode: Int?,

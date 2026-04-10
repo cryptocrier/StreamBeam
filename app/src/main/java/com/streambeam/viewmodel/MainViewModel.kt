@@ -524,7 +524,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             if (tmdbEpisodes.isEmpty()) {
-                android.util.Log.w(Constants.LogTags.VIEW_MODEL, "No TMDB data found for: $imdbId")
+                android.util.Log.w(Constants.LogTags.VIEW_MODEL, "No TMDB data found for: $imdbId - using Cinemeta data")
                 return meta
             }
             
@@ -550,16 +550,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 
                 if (tmdbEp != null) {
                     enrichedCount++
-                    val newTitle = tmdbEp.name?.takeIf { it.isNotBlank() } ?: video.title
-                    android.util.Log.d(Constants.LogTags.VIEW_MODEL, "✓ S${season}E${episodeNum}: '${video.title?.take(20)}' -> '${newTitle.take(20)}'")
+                    // Use TMDB name if it's good, otherwise keep original
+                    val tmdbName = tmdbEp.name?.trim()
+                    val hasGoodTmdbName = !tmdbName.isNullOrBlank() 
+                        && !tmdbName.matches(Regex("^[Ee]pisode\\s*\\d+\\.?$"))
+                    
+                    val newTitle = if (hasGoodTmdbName) tmdbName else video.title
+                    val newOverview = tmdbEp.overview?.takeIf { it.isNotBlank() } ?: video.overview
+                    val newThumbnail = tmdbEp.getFullStillPath() ?: video.thumbnail
+                    
+                    if (hasGoodTmdbName) {
+                        android.util.Log.d(Constants.LogTags.VIEW_MODEL, "✓ S${season}E${episodeNum}: '${video.title?.take(20)}' -> '${newTitle?.take(20)}'")
+                    }
+                    
                     video.copy(
                         title = newTitle,
-                        overview = tmdbEp.overview?.takeIf { it.isNotBlank() } ?: video.overview,
-                        thumbnail = tmdbEp.getFullStillPath() ?: video.thumbnail,
+                        overview = newOverview,
+                        thumbnail = newThumbnail,
                         released = tmdbEp.airDate ?: video.released
                     )
                 } else {
-                    android.util.Log.d(Constants.LogTags.VIEW_MODEL, "✗ S${season}E${episodeNum}: no TMDB match (have: ${tmdbEpisodeMap.keys.joinToString { "${it.first}:${it.second}" }})")
                     video
                 }
             }
@@ -596,7 +606,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             
             if (nextEpisode != null) {
                 val epId = "${seriesId}:${nextEpisode.season}:${nextEpisode.episode}"
-                val epTitle = "${tvShow.name} - S${nextEpisode.season}:E${nextEpisode.episode}${nextEpisode.title?.let { " - $it" } ?: ""}"
+                val epTitle = "${tvShow.name ?: "Unknown"} - S${nextEpisode.season}:E${nextEpisode.episode}${nextEpisode.title?.let { " - $it" } ?: ""}"
                 return Triple(epId, epTitle, true)
             }
             
@@ -607,7 +617,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             
             if (nextSeasonFirstEpisode != null) {
                 val epId = "${seriesId}:${nextSeasonFirstEpisode.season}:${nextSeasonFirstEpisode.episode}"
-                val epTitle = "${tvShow.name} - S${nextSeasonFirstEpisode.season}:E${nextSeasonFirstEpisode.episode}${nextSeasonFirstEpisode.title?.let { " - $it" } ?: ""}"
+                val epTitle = "${tvShow.name ?: "Unknown"} - S${nextSeasonFirstEpisode.season}:E${nextSeasonFirstEpisode.episode}${nextSeasonFirstEpisode.title?.let { " - $it" } ?: ""}"
                 return Triple(epId, epTitle, true)
             }
         }

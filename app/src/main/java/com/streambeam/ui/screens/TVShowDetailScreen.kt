@@ -53,7 +53,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
 import com.streambeam.model.Meta
 import com.streambeam.model.Video
 import com.streambeam.ui.theme.TextSecondary
@@ -93,13 +94,20 @@ fun TVShowDetailScreen(
     
     var selectedSeason by remember { mutableIntStateOf(seasons.keys.firstOrNull() ?: 1) }
     
+    // Keep selected season in sync when seasons data loads/changes
+    LaunchedEffect(seasons.keys.toList()) {
+        if (selectedSeason !in seasons.keys) {
+            selectedSeason = seasons.keys.firstOrNull() ?: 1
+        }
+    }
+    
     // Show initial seasons if no full data yet
     val hasVideos = displayTVShow.videos?.isNotEmpty() == true
     
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(displayTVShow.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(displayTVShow.name ?: "Unknown", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -217,7 +225,7 @@ fun TVShowDetailScreen(
                     onClick = { 
                         // Create episode ID for stream lookup
                         val episodeId = "${displayTVShow.id}:${episode.season}:${episode.episode}"
-                        onEpisodeClick(episodeId, episode.title)
+                        onEpisodeClick(episodeId, episode.title ?: "Episode ${episode.episode}")
                     }
                 )
             }
@@ -271,36 +279,13 @@ fun TVShowHeader(tvShow: Meta) {
             shape = RoundedCornerShape(12.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            SubcomposeAsyncImage(
+            AsyncImage(
                 model = tvShow.poster,
-                contentDescription = tvShow.name,
+                contentDescription = tvShow.name ?: "TV Show",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                loading = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    }
-                },
-                error = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp),
-                            tint = TextSecondary
-                        )
-                    }
-                }
+                placeholder = painterResource(android.R.drawable.ic_menu_gallery),
+                error = painterResource(android.R.drawable.ic_menu_gallery)
             )
         }
         
@@ -310,7 +295,7 @@ fun TVShowHeader(tvShow: Meta) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = tvShow.name,
+                text = tvShow.name ?: "Unknown",
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground
             )
@@ -404,11 +389,13 @@ fun EpisodeCard(
                 contentAlignment = Alignment.Center
             ) {
                 episode.thumbnail?.let { thumb ->
-                    SubcomposeAsyncImage(
+                    AsyncImage(
                         model = thumb,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        placeholder = painterResource(android.R.drawable.ic_menu_gallery),
+                        error = painterResource(android.R.drawable.ic_menu_gallery)
                     )
                 } ?: run {
                     Text(
@@ -446,12 +433,13 @@ fun EpisodeCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Show episode title, but fallback to "Episode X" if title is blank or just "Episode X" pattern
-                val displayTitle = episode.title?.let { title ->
-                    val isGenericTitle = title.isBlank() || 
-                        title.trim().matches(Regex("^[Ee]pisode\\s*\\d+\\.?$"))
-                    if (isGenericTitle) "Episode ${episode.episode}" else title
-                } ?: "Episode ${episode.episode}"
+                // Show episode title - use TMDB/Cinemeta title, fallback to "Episode X"
+                val rawTitle = episode.title?.trim() ?: ""
+                val displayTitle = when {
+                    rawTitle.isBlank() -> "Episode ${episode.episode}"
+                    rawTitle.matches(Regex("^[Ee]pisode\\s*\\d+\\.?$")) -> "Episode ${episode.episode}"
+                    else -> rawTitle
+                }
                 
                 Text(
                     text = displayTitle,
@@ -459,6 +447,13 @@ fun EpisodeCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+                
+                // SxE notation
+                Text(
+                    text = "S${episode.season ?: 1}:E${episode.episode}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 
                 episode.released?.let { date ->

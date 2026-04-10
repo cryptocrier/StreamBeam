@@ -101,20 +101,22 @@ private fun CastBarContent(
         if (client != null) {
             val mediaStatus = client.mediaStatus
             if (mediaStatus != null) {
-                // Always update duration and playing state
-                duration = mediaStatus.mediaInfo?.streamDuration ?: 0L
+                // Get duration from media info - some devices report this with delay
+                val mediaInfo = mediaStatus.mediaInfo
+                if (mediaInfo != null) {
+                    if (mediaInfo.streamDuration > 0) {
+                        duration = mediaInfo.streamDuration
+                    }
+                    title = mediaInfo.metadata?.getString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE) 
+                        ?: "Casting..."
+                }
+                
                 isPlaying = mediaStatus.playerState == com.google.android.gms.cast.MediaStatus.PLAYER_STATE_PLAYING
                 
                 // Only update position if not currently seeking (user dragging)
                 // Use approximateStreamPosition for real-time updates during playback
                 if (!isSeeking) {
                     currentPosition = client.approximateStreamPosition
-                }
-                
-                val mediaInfo = client.mediaInfo
-                if (mediaInfo != null) {
-                    title = mediaInfo.metadata?.getString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE) 
-                        ?: "Casting..."
                 }
             }
         }
@@ -233,17 +235,18 @@ private fun CastBarContent(
                 }
             }
             
-            // Expanded content - shows scrub bar when expanded
-            if (isExpanded && duration > 0) {
+            // Expanded content - shows scrub bar when expanded (if we have any position data)
+            if (isExpanded && (duration > 0 || currentPosition > 0)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    // Seek slider
+                    // Seek slider - use max of duration and position for valid range
                     val sliderValue = if (isSeeking) seekPosition.toFloat() else currentPosition.toFloat()
+                    val maxValue = maxOf(duration.toFloat(), currentPosition.toFloat(), 1f)
                     androidx.compose.material3.Slider(
-                        value = sliderValue.coerceIn(0f, duration.toFloat()),
+                        value = sliderValue.coerceIn(0f, maxValue),
                         onValueChange = { newValue ->
                             isSeeking = true
                             seekPosition = newValue.toLong()
@@ -257,7 +260,7 @@ private fun CastBarContent(
                                 isSeeking = false
                             }
                         },
-                        valueRange = 0f..duration.toFloat(),
+                        valueRange = 0f..maxValue,
                         modifier = Modifier.fillMaxWidth(),
                         colors = androidx.compose.material3.SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
@@ -277,16 +280,18 @@ private fun CastBarContent(
                             color = if (isSeeking) MaterialTheme.colorScheme.primary else TextSecondary
                         )
                         Text(
-                            text = FormatUtils.formatDuration(duration),
+                            text = if (duration > 0) FormatUtils.formatDuration(duration) else "--:--",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary
                         )
                     }
                 }
             } else {
-                // Mini progress bar (when not expanded)
-                if (duration > 0) {
-                    val progress = currentPosition.toFloat() / duration.toFloat()
+                // Mini progress bar (when not expanded) - show if we have any position data
+                if (duration > 0 || currentPosition > 0) {
+                    val progress = if (duration > 0) {
+                        currentPosition.toFloat() / duration.toFloat()
+                    } else 0f
                     LinearProgressIndicator(
                         progress = progress,
                         modifier = Modifier

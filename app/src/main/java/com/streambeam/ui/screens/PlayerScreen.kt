@@ -213,7 +213,11 @@ fun PlayerScreen(
                         if (!isSeeking) {
                             currentPosition = client.approximateStreamPosition
                         }
-                        duration = mediaStatus.mediaInfo?.streamDuration ?: 0L
+                        // Get duration from media info - some devices report this with delay
+                        val mediaInfo = mediaStatus.mediaInfo
+                        if (mediaInfo != null && mediaInfo.streamDuration > 0) {
+                            duration = mediaInfo.streamDuration
+                        }
                         val playerState = mediaStatus.playerState
                         isPlaying = playerState == 2 // PLAYER_STATE_PLAYING
                         isBuffering = playerState == 3 // PLAYER_STATE_BUFFERING
@@ -456,12 +460,18 @@ fun PlayerScreen(
                             )
                         }
                         
-                        // Tap area to show/hide controls
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clickable { showControls = !showControls }
-                        )
+                        // Tap area to show/hide controls - only when controls are hidden
+                        // When controls are visible, let touches pass through to ExoPlayer controls
+                        if (!showControls) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    ) { showControls = true }
+                            )
+                        }
                         
                         // Top controls overlay - show when controls visible
                         AnimatedVisibility(
@@ -470,32 +480,25 @@ fun PlayerScreen(
                             exit = fadeOut(),
                             modifier = Modifier.align(Alignment.TopStart)
                         ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                            // Only show in non-fullscreen mode
+                            if (!isFullscreen) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp)
                                 ) {
-                                    // Back button - only show in non-fullscreen
-                                    if (!isFullscreen) {
-                                        IconButton(
-                                            onClick = onBack,
-                                            modifier = Modifier.size(48.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.ArrowBack,
-                                                contentDescription = "Back",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
+                                    // Back button
+                                    IconButton(
+                                        onClick = onBack,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowBack,
+                                            contentDescription = "Back",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(28.dp)
+                                        )
                                     }
-                                }
-                                
-                                // Title - only show in non-fullscreen mode
-                                if (!isFullscreen) {
+                                    
+                                    // Title - compact style without thick background
                                     Text(
                                         text = title,
                                         style = MaterialTheme.typography.titleMedium,
@@ -503,9 +506,7 @@ fun PlayerScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier
-                                            .padding(top = 8.dp, start = 16.dp, end = 16.dp)
-                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                            .padding(start = 12.dp, top = 4.dp)
                                     )
                                 }
                             }
@@ -987,7 +988,10 @@ fun CastingOverlay(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (duration > 0) {
+            // Always show scrub bar if we have any position data, even without duration
+            val hasMedia = duration > 0 || currentPosition > 0
+            
+            if (hasMedia) {
                 // Time labels
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -999,18 +1003,19 @@ fun CastingOverlay(
                         color = TextSecondary
                     )
                     Text(
-                        text = FormatUtils.formatDuration(duration),
+                        text = if (duration > 0) FormatUtils.formatDuration(duration) else "--:--",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
                 }
                 
-                // Seek bar
+                // Seek bar - use max of duration and current position for range
+                val maxValue = maxOf(duration.toFloat(), currentPosition.toFloat(), 1f)
                 Slider(
-                    value = currentPosition.toFloat().coerceIn(0f, duration.toFloat()),
+                    value = currentPosition.toFloat().coerceIn(0f, maxValue),
                     onValueChange = { onSeekTo(it.toLong()) },
                     onValueChangeFinished = { onSeekFinished() },
-                    valueRange = 0f..duration.toFloat(),
+                    valueRange = 0f..maxValue,
                     modifier = Modifier.fillMaxWidth(),
                     colors = SliderDefaults.colors(
                         thumbColor = MaterialTheme.colorScheme.primary,
@@ -1019,7 +1024,7 @@ fun CastingOverlay(
                     )
                 )
             } else {
-                // Show indeterminate progress when duration unknown
+                // Show indeterminate progress when no media loaded yet
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()

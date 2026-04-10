@@ -70,7 +70,16 @@ app/
    - Go to https://real-debrid.com/apitoken
    - Copy your API token
 
-4. **Run the App**
+4. **(Optional) Get TMDB API Key**
+   - Go to https://www.themoviedb.org/settings/api
+   - Create a free account and get an API key
+   - Add to `local.properties`:
+     ```
+     tmdb.api.key=YOUR_API_KEY_HERE
+     ```
+   - Without this key, episode names will show as generic (e.g., "Episode 1")
+
+5. **Run the App**
    - Connect your Android device or start an emulator
    - Click "Run" in Android Studio
 

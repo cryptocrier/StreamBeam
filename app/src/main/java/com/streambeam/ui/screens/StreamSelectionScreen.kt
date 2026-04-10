@@ -73,7 +73,8 @@ import com.streambeam.ui.theme.Quality720p
 import com.streambeam.ui.theme.QualitySD
 import com.streambeam.ui.theme.TextSecondary
 import com.streambeam.viewmodel.MainViewModel
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -910,7 +911,7 @@ fun TorrentLoadingScreen(
         initialValue = 0.4f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = androidx.compose.animation.core.EaseInOutSine),
+            animation = tween(1500, easing = androidx.compose.animation.core.EaseInOutSine),
             repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
@@ -924,78 +925,30 @@ fun TorrentLoadingScreen(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(32.dp),
             modifier = Modifier.padding(32.dp)
         ) {
-            // Poster with shadow/glow effect
-            Box(
-                modifier = Modifier
-                    .height(280.dp)
-                    .aspectRatio(2f / 3f),
-                contentAlignment = Alignment.Center
-            ) {
-                // Glow effect behind poster
-                if (posterUrl != null) {
-                    SubcomposeAsyncImage(
+            // Poster - simple, no glow/blur effects
+            if (posterUrl != null) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    modifier = Modifier
+                        .height(300.dp)
+                        .aspectRatio(2f / 3f)
+                ) {
+                    AsyncImage(
                         model = posterUrl,
-                        contentDescription = null,
+                        contentDescription = title,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                            .blur(20.dp),
-                        loading = { Box(modifier = Modifier.fillMaxSize()) }
+                        modifier = Modifier.fillMaxSize(),
+                        placeholder = painterResource(android.R.drawable.ic_menu_gallery),
+                        error = painterResource(android.R.drawable.ic_menu_gallery)
                     )
-                }
-                
-                // Main poster
-                if (posterUrl != null) {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        SubcomposeAsyncImage(
-                            model = posterUrl,
-                            contentDescription = title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                            loading = {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(40.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                    )
-                                }
-                            }
-                        )
-                    }
-                } else {
-                    // Fallback poster icon
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(80.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                        )
-                    }
                 }
             }
             
-            // Title with pulsing effect (Stremio-style)
+            // Title with gentle pulsing effect
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
@@ -1004,36 +957,6 @@ fun TorrentLoadingScreen(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            
-            // Custom circular progress with rotation
-            Box(
-                modifier = Modifier.size(48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 4.dp,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            }
-            
-            // Status message
-            Text(
-                text = statusMessage,
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp)
-            )
-            
-            // Additional hint
-            Text(
-                text = "This may take a few moments",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
             )
         }
     }

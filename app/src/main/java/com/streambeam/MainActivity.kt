@@ -199,7 +199,7 @@ class MainActivity : ComponentActivity() {
                                     onEpisodeClick = { episodeId, episodeTitle ->
                                         val safeTitle = episodeTitle ?: "Episode"
                                         val encodedTitle = URLEncoder.encode(
-                                            "${tvShow.name} - $safeTitle",
+                                            "${tvShow.name ?: "Unknown"} - $safeTitle",
                                             StandardCharsets.UTF_8.toString()
                                         )
                                         val encodedPoster = URLEncoder.encode(tvShow.poster ?: "", StandardCharsets.UTF_8.toString())

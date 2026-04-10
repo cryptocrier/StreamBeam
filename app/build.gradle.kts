@@ -1,7 +1,17 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Load local.properties for API keys
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -19,6 +29,10 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        
+        // TMDB API Key - stored in local.properties (not committed to git)
+        val tmdbApiKey = localProperties.getProperty("tmdb.api.key") ?: ""
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     }
 
     buildTypes {
@@ -39,7 +53,10 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+    
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
